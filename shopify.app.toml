@@ -2,7 +2,7 @@
 
 client_id = "d17227215824c8a4d33087ec24a42d70"
 name = "CartMend"
-application_url = "https://example.com"
+application_url = "https://cart-mend.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -10,7 +10,7 @@ embedded = true
 scopes = "read_orders,write_orders,read_products,write_products,read_customers,write_customers,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_order_edits,write_order_edits"
 
 [app_proxy]
-url = "https://example.com/apps/cartmend"
+url = "https://cart-mend.vercel.app/apps/cartmend"
 subpath = "cartmend"
 prefix = "apps"
 
@@ -34,8 +34,7 @@ api_version = "2025-01"
   topics = [ "orders/updated" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://cart-mend.vercel.app/api/auth" ]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true
