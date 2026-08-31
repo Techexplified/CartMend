@@ -1,0 +1,10 @@
+{
+  "name": "cartmend-thank-you",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@shopify/ui-extensions": "2025.7.x",
+    "@shopify/ui-extensions-react": "2025.7.x",
+    "react": "^18.3.1"
+  }
+}

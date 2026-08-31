@@ -1,0 +1,370 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session storage
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// Merchant installation and shop information
+model Shop {
+  id                   String             @id @default(uuid())
+  shopifyShopId        String?            @unique
+  shopDomain           String             @unique
+  accessTokenEncrypted String?
+  scopes               String?
+  installedAt          DateTime           @default(now())
+  uninstalledAt        DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  settings             ShopSettings?
+  orders               Order[]
+  editSessions         OrderEditSession[]
+  webhookEvents        WebhookEvent[]
+  notifications        Notification[]
+
+  @@index([shopDomain])
+  @@index([shopifyShopId])
+}
+
+// Merchant-controlled order editing permissions
+model ShopSettings {
+  id                          String   @id @default(uuid())
+  shopId                      String   @unique
+  shop                        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  editingEnabled              Boolean  @default(false)
+  editingWindowMinutes        Int      @default(180)
+  allowQuantityChange         Boolean  @default(true)
+  allowVariantChange          Boolean  @default(true)
+  allowAddProduct             Boolean  @default(false)
+  allowRemoveProduct          Boolean  @default(true)
+  allowAddressChange          Boolean  @default(false)
+  cancellationEnabled         Boolean  @default(true)
+  cancellationWindowMinutes   Int      @default(60)
+  reorderEnabled              Boolean  @default(true)
+  requirePaymentForDifference Boolean  @default(true)
+  allowRefundForDifference    Boolean  @default(true)
+  notifyCustomer              Boolean  @default(true)
+  sendEditLinkEmail           Boolean  @default(true)
+  sendPaymentRefundEmails     Boolean  @default(true)
+  theme                       String   @default("Light")
+  supportEmail                String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@index([shopId])
+}
+
+// Authoritative snapshot and metadata for Shopify orders
+model Order {
+  id                String             @id @default(uuid())
+  shopId            String
+  shop              Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopifyOrderId    String
+  shopifyOrderGid   String
+  shopifyOrderName  String
+  customerShopifyId String?
+  customerEmail     String?
+  currency          String             @default("USD")
+  originalTotal     Float
+  currentTotal      Float
+  financialStatus   String?
+  fulfillmentStatus String?
+  orderCreatedAt    DateTime
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  editSessions      OrderEditSession[]
+  notifications     Notification[]
+
+  @@unique([shopId, shopifyOrderId])
+  @@index([shopId])
+  @@index([shopifyOrderId])
+  @@index([customerShopifyId])
+  @@index([orderCreatedAt])
+}
+
+enum EditSessionStatus {
+  ACTIVE
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  CANCELLED
+  FAILED
+  PAYMENT_REQUIRED
+}
+
+// Secure Customer Order Edit Sessions
+model OrderEditSession {
+  id                        String            @id @default(uuid())
+  shopId                    String
+  shop                      Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  orderId                   String
+  order                     Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tokenHash                 String            @unique
+  status                    EditSessionStatus @default(ACTIVE)
+  expiresAt                 DateTime
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  cancelledAt               DateTime?
+  originalTotal             Float
+  finalTotal                Float?
+  difference                Float?
+  paymentStatus             String?           @default("NONE")
+  refundStatus              String?           @default("NONE")
+  paymentTransactionId      String?
+  refundId                  String?
+  idempotencyKey            String?
+  paymentUrl                String?
+  shopifyOrderEditSessionId String?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  changes                   OrderEditChange[]
+  events                    OrderEditEvent[]
+  notifications             Notification[]
+  paymentAttempts           PaymentAttempt[]
+
+  @@index([tokenHash])
+  @@index([shopId])
+  @@index([orderId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+enum ChangeType {
+  ADD_PRODUCT
+  REMOVE_PRODUCT
+  CHANGE_QUANTITY
+  CHANGE_VARIANT
+  CHANGE_ADDRESS
+}
+
+// Individual changes tracked within an edit session
+model OrderEditChange {
+  id                String           @id @default(uuid())
+  editSessionId     String
+  editSession       OrderEditSession @relation(fields: [editSessionId], references: [id], onDelete: Cascade)
+  changeType        ChangeType
+  shopifyLineItemId String?
+  shopifyProductId  String?
+  shopifyVariantId  String?
+  oldVariantId      String?
+  newVariantId      String?
+  oldQuantity       Int?
+  newQuantity       Int?
+  oldPrice          Float?
+  newPrice          Float?
+  quantityDelta     Int?
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+
+  @@index([editSessionId])
+}
+
+enum EditEventType {
+  SESSION_CREATED
+  SESSION_OPENED
+  EDIT_STARTED
+  ITEM_ADDED
+  ITEM_REMOVED
+  QUANTITY_CHANGED
+  VARIANT_CHANGED
+  ADDRESS_CHANGED
+  EDIT_VALIDATED
+  SHOPIFY_EDIT_STARTED
+  SHOPIFY_EDIT_COMMITTED
+  PAYMENT_REQUIRED
+  PAYMENT_INITIATED
+  PAYMENT_COMPLETED
+  REFUND_STARTED
+  REFUND_COMPLETED
+  REFUND_FAILED
+  EDIT_COMPLETED
+  EDIT_FAILED
+  SESSION_EXPIRED
+  SESSION_CANCELLED
+}
+
+enum ActorType {
+  CUSTOMER
+  MERCHANT
+  SYSTEM
+  SHOPIFY
+}
+
+// Immutable audit trail for order editing events
+model OrderEditEvent {
+  id            String           @id @default(uuid())
+  editSessionId String
+  editSession   OrderEditSession @relation(fields: [editSessionId], references: [id], onDelete: Cascade)
+  eventType     EditEventType
+  actorType     ActorType
+  metadata      Json?
+  createdAt     DateTime         @default(now())
+
+  @@index([editSessionId])
+  @@index([eventType])
+}
+
+// Idempotent webhook tracking
+model WebhookEvent {
+  id               String    @id @default(uuid())
+  shopId           String
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopifyWebhookId String
+  topic            String
+  payloadHash      String
+  processed        Boolean   @default(false)
+  processedAt      DateTime?
+  errorMessage     String?
+  payload          Json?
+  createdAt        DateTime  @default(now())
+
+  @@unique([shopId, shopifyWebhookId])
+  @@index([shopId])
+  @@index([shopifyWebhookId])
+  @@index([topic])
+}
+
+enum NotificationType {
+  EDIT_LINK
+  EDIT_CONFIRMATION
+  EDIT_EXPIRED
+  PAYMENT_REQUIRED
+  EDIT_FAILED
+  SUPPORT_TICKET
+}
+
+// Customer notification log
+model Notification {
+  id                String            @id @default(uuid())
+  shopId            String
+  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  orderId           String?
+  order             Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  editSessionId     String?
+  editSession       OrderEditSession? @relation(fields: [editSessionId], references: [id], onDelete: SetNull)
+  type              NotificationType
+  recipient         String
+  status            String
+  providerMessageId String?
+  errorMessage      String?
+  sentAt            DateTime?
+  createdAt         DateTime          @default(now())
+
+  @@index([shopId])
+  @@index([orderId])
+  @@index([editSessionId])
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  REDIRECT_REQUIRED
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+model PaymentAttempt {
+  id                String               @id @default(uuid())
+  editSessionId     String
+  editSession       OrderEditSession     @relation(fields: [editSessionId], references: [id], onDelete: Cascade)
+  shopId            String
+  status            PaymentAttemptStatus @default(PENDING)
+  amount            Float
+  currency          String               @default("USD")
+  idempotencyKey    String               @unique
+  paymentUrl        String?
+  providerReference String?
+  errorMessage      String?
+  createdAt         DateTime             @default(now())
+  completedAt       DateTime?
+  failedAt          DateTime?
+  metadata          Json?
+
+  @@index([editSessionId])
+  @@index([shopId])
+  @@index([status])
+  @@index([idempotencyKey])
+}
+
+// Backward-compatible UI support models
+model AppSettings {
+  id                     String   @id @default(cuid())
+  shop                   String   @unique
+  isActivated            Boolean  @default(false)
+  editWindowHours        Int      @default(24)
+  allowAddressEdit       Boolean  @default(true)
+  allowQuantityChange    Boolean  @default(true)
+  allowItemSwap          Boolean  @default(true)
+  allowOrderCancellation Boolean  @default(true)
+  requireCustomerAccount Boolean  @default(false)
+  notifyMerchantOnEdit   Boolean  @default(true)
+  sendPaymentRefundEmails Boolean @default(true)
+  theme                  String   @default("Light")
+  supportEmail           String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model OrderActivity {
+  id            String   @id @default(cuid())
+  shop          String
+  orderId       String
+  orderNumber   String
+  customerName  String?
+  customerEmail String?
+  actionType    String
+  summary       String
+  details       String?
+  previousTotal Float?
+  newTotal      Float?
+  createdAt     DateTime @default(now())
+}
+
+model SupportTicket {
+  id           String   @id @default(uuid())
+  shopDomain   String
+  shopName     String?
+  ticketNumber String   @unique
+  issueType    String
+  orderId      String?
+  description  String
+  email        String
+  attachment   String?
+  status       String   @default("OPEN")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([shopDomain])
+  @@index([status])
+}

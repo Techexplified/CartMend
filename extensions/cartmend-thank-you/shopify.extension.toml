@@ -1,0 +1,27 @@
+api_version = "2025-07"
+
+[[extensions]]
+name = "CartMend Post-Purchase Actions"
+handle = "cartmend-thank-you"
+uid = "f35c3ee8-7eff-88ef-f0e6-fee0e56b7a30eacbeafd"
+type = "ui_extension"
+
+[[extensions.targeting]]
+module = "./src/ThankYouBlock.tsx"
+target = "purchase.thank-you.block.render"
+
+[[extensions.targeting]]
+module = "./src/ThankYouBlock.tsx"
+target = "purchase.thank-you.customer-information.render-after"
+
+[[extensions.targeting]]
+module = "./src/ThankYouBlock.tsx"
+target = "customer-account.order-status.block.render"
+
+[[extensions.targeting]]
+module = "./src/ThankYouBlock.tsx"
+target = "customer-account.order-status.customer-information.render-after"
+
+[extensions.capabilities]
+api_access = true
+network_access = true
