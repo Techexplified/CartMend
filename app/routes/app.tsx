@@ -17,9 +17,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.warn("[CartMend] Could not query theme in app.tsx loader:", err);
   }
 
-  // eslint-disable-next-line no-undef
   return {
-    apiKey: process.env.SHOPIFY_API_KEY || "",
+    apiKey: process.env.SHOPIFY_API_KEY || "d17227215824c8a4d33087ec24a42d70",
     theme,
   };
 };
