@@ -501,7 +501,7 @@ export class PostPurchaseActionService {
     const client = createShopifyGraphQLClient(cleanDomain);
 
     // Perform actual Shopify Admin GraphQL cancellation
-    await client.orderCancel(orderGid, reason, "ORIGINAL", true);
+    await client.orderCancel(orderGid, reason, true, true);
 
     const cancelledAt = new Date().toISOString();
 

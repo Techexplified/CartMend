@@ -71,7 +71,7 @@ describe("Order Cancellation & Refund Tests", () => {
     await updateMerchantSettings(testShop, {
       editingEnabled: true,
       editingWindowMinutes: 60,
-      allowOrderCancellation: true,
+      cancellationEnabled: true,
       allowRemoveProduct: true,
       allowRefundForDifference: true,
       requirePaymentForDifference: true,
@@ -168,7 +168,6 @@ describe("Order Cancellation & Refund Tests", () => {
   it("should block order cancellation if merchant policy disables cancellation", async () => {
     await updateMerchantSettings(testShop, {
       editingEnabled: true,
-      allowOrderCancellation: false,
       allowRemoveProduct: false,
       cancellationEnabled: false,
     });

@@ -8,11 +8,26 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY || "cartmend_api_key",
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || "cartmend_api_secret",
-  apiVersion: ApiVersion.July26,
-  scopes: process.env.SCOPES?.split(",") || ["read_orders", "write_orders", "read_products", "write_products"],
-  appUrl: process.env.SHOPIFY_APP_URL || "https://example.com",
+  apiKey: process.env.SHOPIFY_API_KEY,
+  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
+  apiVersion: ApiVersion.January25,
+  scopes: process.env.SCOPES?.split(",") || [
+    "read_orders",
+    "write_orders",
+    "read_products",
+    "write_products",
+    "read_customers",
+    "write_customers",
+    "read_merchant_managed_fulfillment_orders",
+    "write_merchant_managed_fulfillment_orders",
+    "read_order_edits",
+    "write_order_edits",
+  ],
+  appUrl:
+    process.env.SHOPIFY_APP_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "https://cart-mend.vercel.app"),
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
@@ -25,7 +40,7 @@ const shopify = shopifyApp({
 });
 
 export default shopify;
-export const apiVersion = ApiVersion.July26;
+export const apiVersion = ApiVersion.January25;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
 export const unauthenticated = shopify.unauthenticated;
