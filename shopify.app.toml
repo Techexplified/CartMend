@@ -33,9 +33,9 @@ scopes = "read_orders,write_orders,read_products,write_products,read_customers,w
 
 [auth]
 redirect_urls = [
+  "https://cart-mend.vercel.app/api/auth",
   "https://cart-mend.vercel.app/auth/callback",
-  "https://cart-mend.vercel.app/auth/shopify/callback",
-  "https://cart-mend.vercel.app/api/auth"
+  "https://cart-mend.vercel.app/auth/shopify/callback"
 ]
 
 [app_proxy]
