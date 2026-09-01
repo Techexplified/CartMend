@@ -36,53 +36,17 @@ function getCurrencySymbol(currencyCode?: string): string {
 }
 
 const CARTMEND_EMAIL_LIQUID = `{% comment %} CartMend - Edit your order button {% endcomment %}
-{% assign cartmend_shop = shop.permanent_domain | default: shop.domain | default: shop.myshopify_domain %}
-{% assign cartmend_order_id = order.id | default: id | default: 9999 %}
 {% assign cartmend_edit_url = order.metafields.cartmend.edit_url %}
-{% if cartmend_edit_url == blank and cartmend_shop != blank %}
-  {% capture cartmend_edit_url %}https://{{ cartmend_shop }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ cartmend_order_id }}&shop={{ cartmend_shop }}&redirect=1{% endcapture %}
+{% if cartmend_edit_url == blank %}
+  {% assign order_ident = order.id | default: id %}
+  {% if order_ident != blank %}
+    {% capture cartmend_edit_url %}https://{{ shop.permanent_domain }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ order_ident }}&shop={{ shop.permanent_domain }}{% endcapture %}
+  {% endif %}
 {% endif %}
+
 {% if cartmend_edit_url != blank %}
-  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 10px;">
-    <tr>
-      <td style="background-color: #ffffff; border: 1.5px solid #d1d5db; border-radius: 4px; text-align: center; padding: 12px 18px;">
-        <a href="{{ cartmend_edit_url }}" style="color: #1f2937; text-decoration: none; font-weight: 600; font-size: 14px; display: block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Edit your order</a>
-      </td>
-    </tr>
-  </table>
+  <a href="{{ cartmend_edit_url }}" class="button__text" style="margin-left: 10px;">Edit your order</a>
 {% endif %}`;
-
-const CARTMEND_LOCATION_1_LOGIC = `{% comment %} CartMend Edit Order URL Resolution {% endcomment %}
-{% assign cartmend_shop = shop.permanent_domain | default: shop.domain | default: shop.myshopify_domain %}
-{% assign cartmend_order_id = order.id | default: id | default: 9999 %}
-{% assign cartmend_edit_url = order.metafields.cartmend.edit_url %}
-{% if cartmend_edit_url == blank and cartmend_shop != blank %}
-  {% capture cartmend_edit_url %}https://{{ cartmend_shop }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ cartmend_order_id }}&shop={{ cartmend_shop }}&redirect=1{% endcapture %}
-{% endif %}`;
-
-const CARTMEND_LOCATION_2_CSS = `    .button__cell--cartmend {
-      background-color: #ffffff !important;
-      border: 1.5px solid #d1d5db;
-      border-radius: 4px;
-    }
-    .button__text--cartmend {
-      color: #1f2937 !important;
-      font-weight: 600;
-      text-decoration: none;
-      display: inline-block;
-    }`;
-
-const CARTMEND_LOCATION_3_HTML = `          {% if cartmend_edit_url != blank %}
-            <td valign="middle" style="padding-left: 10px; vertical-align: middle;">
-              <table class="button" style="border: 1.5px solid #d1d5db; border-radius: 4px; background: #ffffff;">
-                <tr>
-                  <td class="button__cell button__cell--cartmend" style="padding: 10px 18px;">
-                    <a href="{{ cartmend_edit_url }}" class="button__text button__text--cartmend">Edit your order</a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          {% endif %}`;
 
 function formatDate(dateInput?: string | Date | null): string {
   if (!dateInput) return "—";
@@ -741,9 +705,6 @@ export default function CartMendDashboard() {
   const [selectedActivity, setSelectedActivity] = useState<typeof activities[0] | null>(null);
 
   const [copiedLiquid, setCopiedLiquid] = useState(false);
-  const [copiedLoc1, setCopiedLoc1] = useState(false);
-  const [copiedLoc2, setCopiedLoc2] = useState(false);
-  const [copiedLoc3, setCopiedLoc3] = useState(false);
   const isEmailSetupDone = fetcher.data && "emailSetupCompleted" in fetcher.data
     ? Boolean((fetcher.data as any).emailSetupCompleted)
     : isEmailSetupCompleted;
@@ -756,38 +717,8 @@ export default function CartMendDashboard() {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(CARTMEND_EMAIL_LIQUID).then(() => {
         setCopiedLiquid(true);
-        shopify.toast.show("All-in-one code copied to clipboard!");
+        shopify.toast.show("Liquid code copied to clipboard!");
         setTimeout(() => setCopiedLiquid(false), 2500);
-      });
-    }
-  };
-
-  const handleCopyLoc1 = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(CARTMEND_LOCATION_1_LOGIC).then(() => {
-        setCopiedLoc1(true);
-        shopify.toast.show("Location 1 (URL Logic) copied!");
-        setTimeout(() => setCopiedLoc1(false), 2500);
-      });
-    }
-  };
-
-  const handleCopyLoc2 = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(CARTMEND_LOCATION_2_CSS).then(() => {
-        setCopiedLoc2(true);
-        shopify.toast.show("Location 2 (CSS Styles) copied!");
-        setTimeout(() => setCopiedLoc2(false), 2500);
-      });
-    }
-  };
-
-  const handleCopyLoc3 = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(CARTMEND_LOCATION_3_HTML).then(() => {
-        setCopiedLoc3(true);
-        shopify.toast.show("Location 3 (Button Markup) copied!");
-        setTimeout(() => setCopiedLoc3(false), 2500);
       });
     }
   };
@@ -1685,27 +1616,29 @@ export default function CartMendDashboard() {
 
             {/* SECTION 2 — Setup instructions */}
             <div className="cm-setup-flow">
-              {/* Step 1 — The 3 Exact Locations */}
+              {/* Step 1 */}
               <div className="cm-setup-step">
                 <div className="cm-setup-step-bubble">1</div>
-                <h4 className="cm-setup-step-title">Copy &amp; Paste into the 3 Locations</h4>
+                <h4 className="cm-setup-step-title">Copy the CartMend code</h4>
                 <p className="cm-setup-step-desc">
-                  Open your Shopify <strong>Order confirmation</strong> notification code and place these 3 snippets in their exact locations:
+                  Copy the code below. You only need to do this once for this store.
                 </p>
-
-                {/* Location 1 Box */}
-                <div className="cm-liquid-code-box" style={{ marginTop: "12px", border: "1px solid #cbd5e1" }}>
-                  <div className="cm-liquid-code-header" style={{ background: "#f1f5f9" }}>
-                    <span className="cm-liquid-badge" style={{ background: "#e2e8f0", color: "#0f172a", fontWeight: 700 }}>
-                      📍 Location 1: At Line ~18 (URL Logic)
+                <div className="cm-liquid-code-box">
+                  <div className="cm-liquid-code-header">
+                    <span className="cm-liquid-badge">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                      </svg>
+                      CartMend Liquid
                     </span>
                     <button
                       type="button"
-                      onClick={handleCopyLoc1}
-                      className={`cm-liquid-copy-btn ${copiedLoc1 ? "copied" : ""}`}
-                      aria-label="Copy Location 1 Code"
+                      onClick={handleCopyCode}
+                      className={`cm-liquid-copy-btn ${copiedLiquid ? "copied" : ""}`}
+                      aria-label="Copy CartMend Liquid Code"
                     >
-                      {copiedLoc1 ? (
+                      {copiedLiquid ? (
                         <>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <polyline points="20 6 9 17 4 12" />
@@ -1718,87 +1651,12 @@ export default function CartMendDashboard() {
                             <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
                             <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
                           </svg>
-                          <span>Copy URL Logic</span>
+                          <span>Copy code</span>
                         </>
                       )}
                     </button>
                   </div>
-                  <div style={{ padding: "8px 14px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: "12px", color: "#475569" }}>
-                    <strong>Search for:</strong> <code style={{ background: "#e2e8f0", padding: "1px 5px", borderRadius: "3px" }}>delivery_agreements</code> (Line ~17) → Paste directly below it:
-                  </div>
-                  <pre className="cm-liquid-code-body">{CARTMEND_LOCATION_1_LOGIC}</pre>
-                </div>
-
-                {/* Location 2 Box */}
-                <div className="cm-liquid-code-box" style={{ marginTop: "14px", border: "1px solid #cbd5e1" }}>
-                  <div className="cm-liquid-code-header" style={{ background: "#f1f5f9" }}>
-                    <span className="cm-liquid-badge" style={{ background: "#e2e8f0", color: "#0f172a", fontWeight: 700 }}>
-                      📍 Location 2: Inside &lt;style&gt; (Around Line ~85)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCopyLoc2}
-                      className={`cm-liquid-copy-btn ${copiedLoc2 ? "copied" : ""}`}
-                      aria-label="Copy Location 2 Code"
-                    >
-                      {copiedLoc2 ? (
-                        <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                          </svg>
-                          <span>Copy CSS Styles</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div style={{ padding: "8px 14px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: "12px", color: "#475569" }}>
-                    <strong>Search for:</strong> <code style={{ background: "#e2e8f0", padding: "1px 5px", borderRadius: "3px" }}>&lt;style&gt;</code> → Add these classes inside the style block:
-                  </div>
-                  <pre className="cm-liquid-code-body">{CARTMEND_LOCATION_2_CSS}</pre>
-                </div>
-
-                {/* Location 3 Box */}
-                <div className="cm-liquid-code-box" style={{ marginTop: "14px", border: "1px solid #cbd5e1" }}>
-                  <div className="cm-liquid-code-header" style={{ background: "#f1f5f9" }}>
-                    <span className="cm-liquid-badge" style={{ background: "#e2e8f0", color: "#0f172a", fontWeight: 700 }}>
-                      📍 Location 3: Beside "View your order" (Around Line ~285)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCopyLoc3}
-                      className={`cm-liquid-copy-btn ${copiedLoc3 ? "copied" : ""}`}
-                      aria-label="Copy Location 3 Code"
-                    >
-                      {copiedLoc3 ? (
-                        <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                          </svg>
-                          <span>Copy Button Markup</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div style={{ padding: "8px 14px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: "12px", color: "#475569" }}>
-                    <strong>Search for:</strong> <code style={{ background: "#e2e8f0", padding: "1px 5px", borderRadius: "3px" }}>View your order</code> → Paste right below the &lt;/td&gt; of <code style={{ background: "#e2e8f0", padding: "1px 5px", borderRadius: "3px" }}>main-action-cell</code>:
-                  </div>
-                  <pre className="cm-liquid-code-body">{CARTMEND_LOCATION_3_HTML}</pre>
+                  <pre className="cm-liquid-code-body">{CARTMEND_EMAIL_LIQUID}</pre>
                 </div>
               </div>
 
@@ -1834,11 +1692,10 @@ export default function CartMendDashboard() {
                 </div>
               </div>
 
-              {/* Step 3 — Navigation Pathway & Quick All-in-One Option */}
+              {/* Step 3 */}
               <div className="cm-setup-step">
                 <div className="cm-setup-step-bubble">3</div>
-                <h4 className="cm-setup-step-title">Save and Preview</h4>
-                
+                <h4 className="cm-setup-step-title">Paste the code into your Order Confirmation email</h4>
                 <div className="cm-pathway-box">
                   <span className="cm-pathway-node">Shopify Admin</span>
                   <span className="cm-pathway-arrow">→</span>
@@ -1850,35 +1707,14 @@ export default function CartMendDashboard() {
                   <span className="cm-pathway-arrow">→</span>
                   <span className="cm-pathway-node">Edit code</span>
                   <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node" style={{ background: "#f0fdf4", borderColor: "#86efac", color: "#166534" }}>Save &amp; Preview</span>
+                  <span className="cm-pathway-node">Find "View your order"</span>
+                  <span className="cm-pathway-arrow">→</span>
+                  <span className="cm-pathway-node">Paste CartMend code below it</span>
+                  <span className="cm-pathway-arrow">→</span>
+                  <span className="cm-pathway-node" style={{ background: "#f0fdf4", borderColor: "#86efac", color: "#166534" }}>Save</span>
                 </div>
-
-                <details style={{ marginTop: "14px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px 16px", background: "#f8fafc" }}>
-                  <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "13px", color: "#1e293b" }}>
-                    ⚡ Prefer a single 1-click snippet? (All-in-one button)
-                  </summary>
-                  <div style={{ marginTop: "10px" }}>
-                    <p style={{ fontSize: "12.5px", color: "#475569", margin: "0 0 8px 0" }}>
-                      Paste this standalone table directly below any button <code style={{ background: "#e2e8f0", padding: "1px 5px", borderRadius: "3px" }}>&lt;/table&gt;</code>:
-                    </p>
-                    <div className="cm-liquid-code-box">
-                      <div className="cm-liquid-code-header">
-                        <span className="cm-liquid-badge">All-in-One Snippet</span>
-                        <button
-                          type="button"
-                          onClick={handleCopyCode}
-                          className={`cm-liquid-copy-btn ${copiedLiquid ? "copied" : ""}`}
-                        >
-                          {copiedLiquid ? <span>Copied! ✓</span> : <span>Copy All-in-One Code</span>}
-                        </button>
-                      </div>
-                      <pre className="cm-liquid-code-body">{CARTMEND_EMAIL_LIQUID}</pre>
-                    </div>
-                  </div>
-                </details>
-
-                <div className="cm-tip-note" style={{ marginTop: "12px" }}>
-                  <strong>Tip:</strong> Keep Shopify's existing "View your order" button intact. CartMend adds the "Edit your order" button seamlessly.
+                <div className="cm-tip-note">
+                  <strong>Tip:</strong> Keep Shopify's existing "View your order" button. Add the CartMend code below it.
                 </div>
               </div>
 
