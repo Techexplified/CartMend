@@ -265,10 +265,22 @@ body {
   border-radius: var(--cm-radius-button);
   border: none;
   cursor: pointer;
-  width: 100%;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   box-sizing: border-box;
   text-align: center;
   transition: background 0.15s ease-in-out;
+}
+
+.cm-rules-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .cm-btn-primary:hover {

@@ -286,15 +286,15 @@ export default function EditingRules() {
   return (
     <div className="cartmend-container">
       {/* Top Header */}
-      <div className="cm-rules-header">
+      <div className="cm-rules-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", gap: "16px", flexWrap: "wrap" }}>
         <div>
-          <h1 className="cm-title">Editing Rules &amp; Safety Settings</h1>
-          <p className="cm-subtitle">
+          <h1 className="cm-title" style={{ margin: "0 0 4px 0" }}>Editing Rules &amp; Safety Settings</h1>
+          <p className="cm-subtitle" style={{ margin: 0 }}>
             Control what your customers can edit, when they can do it, and what happens based on order status.
           </p>
         </div>
 
-        <div className="cm-rules-header-actions" style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div className="cm-rules-header-actions" style={{ display: "inline-flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           {/* Primary Enable/Disable Toggle Button */}
           <button
             type="button"
@@ -308,37 +308,38 @@ export default function EditingRules() {
             style={{
               display: "inline-flex",
               alignItems: "center",
-              gap: "8px",
-              padding: "8px 18px",
-              borderRadius: "8px",
+              gap: "7px",
+              padding: "7px 14px",
+              borderRadius: "6px",
               fontWeight: 600,
-              fontSize: "13.5px",
+              fontSize: "13px",
               cursor: "pointer",
+              width: "auto",
               backgroundColor: isEditingEnabled ? "#fff" : "#008060",
               borderColor: isEditingEnabled ? "#d82c0d" : "#008060",
               color: isEditingEnabled ? "#d82c0d" : "#ffffff",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
               transition: "all 0.15s ease",
             }}
           >
             <span
               style={{
-                width: "8px",
-                height: "8px",
+                width: "7px",
+                height: "7px",
                 borderRadius: "50%",
                 backgroundColor: isEditingEnabled ? "#d82c0d" : "#a7f3d0",
               }}
             />
-            {isEditingEnabled ? "Disable Order Editing" : "Enable Order Editing"}
+            {isEditingEnabled ? "Disable editing" : "Enable editing"}
           </button>
 
           <span
             className={isEditingEnabled ? "cm-badge-active" : "cm-badge-completed"}
             style={{
-              padding: "6px 12px",
+              padding: "5px 10px",
               borderRadius: "16px",
-              fontSize: "13px",
-              fontWeight: 600,
+              fontSize: "12px",
+              fontWeight: 500,
               backgroundColor: isEditingEnabled ? "#dcfce7" : "#f3f4f6",
               color: isEditingEnabled ? "#15803d" : "#6b7280",
               display: "inline-flex",
@@ -348,23 +349,23 @@ export default function EditingRules() {
           >
             <span
               className="cm-status-dot"
-              style={{ backgroundColor: isEditingEnabled ? "#22c55e" : "#9ca3af" }}
+              style={{ backgroundColor: isEditingEnabled ? "#22c55e" : "#9ca3af", width: "6px", height: "6px" }}
             />
-            {isEditingEnabled ? "Status: Active" : "Status: Disabled"}
+            {isEditingEnabled ? "Active" : "Disabled"}
           </span>
 
           <button
             type="button"
             className="cm-btn-outline"
             onClick={() => setIsPreviewOpen(true)}
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "7px 14px", fontSize: "13px", width: "auto" }}
           >
             {/* Eye preview icon */}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "16px", height: "16px" }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "15px", height: "15px" }}>
               <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
-            Preview customer experience
+            <span>Preview customer experience</span>
           </button>
         </div>
       </div>
