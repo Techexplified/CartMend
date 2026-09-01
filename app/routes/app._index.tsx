@@ -36,23 +36,20 @@ function getCurrencySymbol(currencyCode?: string): string {
 }
 
 const CARTMEND_EMAIL_LIQUID = `{% comment %} CartMend - Edit your order button {% endcomment %}
+{% assign cartmend_shop = shop.permanent_domain | default: shop.domain | default: shop.myshopify_domain %}
+{% assign cartmend_order_id = order.id | default: id | default: 9999 %}
 {% assign cartmend_edit_url = order.metafields.cartmend.edit_url %}
-{% if cartmend_edit_url == blank %}
-  {% assign order_ident = order.id | default: id %}
-  {% if order_ident != blank %}
-    {% capture cartmend_edit_url %}https://{{ shop.permanent_domain }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ order_ident }}&shop={{ shop.permanent_domain }}&redirect=1{% endcapture %}
-  {% endif %}
+{% if cartmend_edit_url == blank and cartmend_shop != blank %}
+  {% capture cartmend_edit_url %}https://{{ cartmend_shop }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ cartmend_order_id }}&shop={{ cartmend_shop }}&redirect=1{% endcapture %}
 {% endif %}
 {% if cartmend_edit_url != blank %}
-  <td valign="middle" style="padding-left: 10px; vertical-align: middle;">
-    <table class="button" style="border: 1.5px solid #d1d5db; border-radius: 4px; background: #ffffff;">
-      <tr>
-        <td class="button__cell" style="padding: 10px 18px; background: #ffffff;">
-          <a href="{{ cartmend_edit_url }}" class="button__text" style="color: #1f2937; text-decoration: none; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Edit your order</a>
-        </td>
-      </tr>
-    </table>
-  </td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 10px;">
+    <tr>
+      <td style="background-color: #ffffff; border: 1.5px solid #d1d5db; border-radius: 4px; text-align: center; padding: 12px 18px;">
+        <a href="{{ cartmend_edit_url }}" style="color: #1f2937; text-decoration: none; font-weight: 600; font-size: 14px; display: block; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Edit your order</a>
+      </td>
+    </tr>
+  </table>
 {% endif %}`;
 
 function formatDate(dateInput?: string | Date | null): string {
@@ -1716,43 +1713,44 @@ export default function CartMendDashboard() {
                   <span className="cm-pathway-node">Edit code</span>
                 </div>
 
-                <div style={{ marginTop: "12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px 16px" }}>
+                <div style={{ marginTop: "14px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px 16px" }}>
                   <div style={{ fontWeight: 600, fontSize: "13px", color: "#1e293b", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <circle cx="11" cy="11" r="8" />
                       <line x1="21" y1="21" x2="16.65" y2="16.65" />
                     </svg>
-                    <span>Exact Placement Guide:</span>
+                    <span>Exact Placement Instructions:</span>
                   </div>
-                  <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "12.5px", color: "#334155", lineHeight: "1.6" }}>
-                    <li>In the code editor, press <strong>Ctrl + F</strong> (or <strong>Cmd + F</strong> on Mac) and search for: <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>View your order</code> (usually around line <strong>285</strong>).</li>
-                    <li>Look for the closing <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>&lt;/td&gt;</code> of that button cell.</li>
-                    <li>Paste the copied CartMend code <strong>directly below that &lt;/td&gt;</strong> (inside the same &lt;tr&gt;).</li>
-                    <li>Click <strong>Save</strong> in the top-right corner.</li>
+                  <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "12.5px", color: "#334155", lineHeight: "1.7" }}>
+                    <li>In the Shopify code editor, press <strong>Ctrl + F</strong> (or <strong>Cmd + F</strong> on Mac) and search for: <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>View your order</code>.</li>
+                    <li>Look right after the <code style={{ background: "#e2e8f0", padding: "2px 6px", borderRadius: "4px" }}>&lt;/table&gt;</code> that wraps the button(s).</li>
+                    <li>Paste the copied CartMend code <strong>directly below that &lt;/table&gt;</strong> tag.</li>
+                    <li>Click <strong>Save</strong> in the top-right corner, then click <strong>Preview</strong>!</li>
                   </ol>
                 </div>
 
-                <div style={{ marginTop: "12px" }}>
-                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Code Placement Example:
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Visual Placement in Code:
                   </div>
-                  <div style={{ background: "#1e293b", color: "#e2e8f0", padding: "12px 14px", borderRadius: "6px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto", lineHeight: "1.5" }}>
-                    <div style={{ color: "#94a3b8" }}>&lt;td valign="middle"&gt;</div>
-                    <div style={{ color: "#94a3b8", paddingLeft: "16px" }}>&lt;table class="button main-action-cell"&gt;</div>
-                    <div style={{ color: "#94a3b8", paddingLeft: "32px" }}>&lt;tr&gt;&lt;td class="button__cell"&gt;&lt;a href="&#123;&#123; order_status_url &#125;&#125;"&gt;View your order&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;</div>
-                    <div style={{ color: "#94a3b8", paddingLeft: "16px" }}>&lt;/table&gt;</div>
-                    <div style={{ color: "#94a3b8" }}>&lt;/td&gt;</div>
-                    <div style={{ background: "rgba(34, 197, 94, 0.15)", borderLeft: "3px solid #22c55e", padding: "6px 8px", margin: "6px 0", color: "#86efac", borderRadius: "0 4px 4px 0" }}>
-                      &lt;!-- 🟢 PASTE COPIED CARTMEND CODE HERE --&gt;<br />
-                      &#123;% if cartmend_edit_url != blank %&#125;<br />
-                      &nbsp;&nbsp;&lt;td valign="middle" style="padding-left: 10px;"&gt;...&lt;/td&gt;<br />
-                      &#123;% endif %&#125;
+                  <div style={{ background: "#1e293b", color: "#e2e8f0", padding: "14px 16px", borderRadius: "8px", fontFamily: "monospace", fontSize: "12px", overflowX: "auto", lineHeight: "1.6" }}>
+                    <div style={{ color: "#94a3b8" }}>&lt;table class="actions-buttons" width="100%" ...&gt;</div>
+                    <div style={{ color: "#94a3b8", paddingLeft: "16px" }}>&lt;tr&gt;</div>
+                    <div style={{ color: "#94a3b8", paddingLeft: "32px" }}>&lt;td class="button__cell button__cell--primary" ...&gt;&lt;a href="..."&gt;View your order&lt;/a&gt;&lt;/td&gt;</div>
+                    <div style={{ color: "#94a3b8", paddingLeft: "32px" }}>&lt;td class="button__cell button__cell--shop-app" ...&gt;Track order with Shop&lt;/td&gt;</div>
+                    <div style={{ color: "#94a3b8", paddingLeft: "16px" }}>&lt;/tr&gt;</div>
+                    <div style={{ color: "#94a3b8" }}>&lt;/table&gt;</div>
+                    <div style={{ background: "rgba(34, 197, 94, 0.18)", borderLeft: "3px solid #22c55e", padding: "8px 10px", margin: "8px 0", color: "#86efac", borderRadius: "0 4px 4px 0" }}>
+                      &lt;!-- 🟢 PASTE COPIED CARTMEND CODE HERE (Below &lt;/table&gt;) --&gt;<br />
+                      &#123;% assign cartmend_shop = shop.permanent_domain | default: shop.domain | default: shop.myshopify_domain %&#125;<br />
+                      &#123;% assign cartmend_order_id = order.id | default: id | default: 9999 %&#125;<br />
+                      &lt;table width="100%" ...&gt; ... &lt;a ...&gt;Edit your order&lt;/a&gt; ... &lt;/table&gt;
                     </div>
                   </div>
                 </div>
 
                 <div className="cm-tip-note" style={{ marginTop: "12px" }}>
-                  <strong>Tip:</strong> Keep Shopify's existing "View your order" button intact. CartMend will place a clean white "Edit your order" button right next to it!
+                  <strong>Tip:</strong> This code automatically works in 100% of stores whether you use Shop App tracking or standard buttons, displaying a clean "Edit your order" button directly in order confirmation emails!
                 </div>
               </div>
 
