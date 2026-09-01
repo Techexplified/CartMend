@@ -35,17 +35,49 @@ function getCurrencySymbol(currencyCode?: string): string {
   }
 }
 
-const CARTMEND_EMAIL_LIQUID = `{% comment %} CartMend - Edit your order button {% endcomment %}
+const CARTMEND_EMAIL_LIQUID_SHOP_APP = `{% comment %} CartMend Edit Order Button {% endcomment %}
+{% assign cm_shop = shop.permanent_domain | default: shop.myshopify_domain | default: shop.domain %}
+{% if cm_shop == blank and shop.url != blank %}
+  {% assign cm_shop = shop.url | remove: "https://" | remove: "http://" | split: "/" | first %}
+{% endif %}
+{% assign cm_order_id = order.id | default: id | default: "preview_order" %}
 {% assign cartmend_edit_url = order.metafields.cartmend.edit_url %}
-{% if cartmend_edit_url == blank %}
-  {% assign order_ident = order.id | default: id %}
-  {% if order_ident != blank %}
-    {% capture cartmend_edit_url %}https://{{ shop.permanent_domain }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ order_ident }}&shop={{ shop.permanent_domain }}{% endcapture %}
-  {% endif %}
+{% if cartmend_edit_url == blank and cm_shop != blank %}
+  {% capture cartmend_edit_url %}https://{{ cm_shop }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ cm_order_id }}&shop={{ cm_shop }}&redirect=1{% endcapture %}
 {% endif %}
 
 {% if cartmend_edit_url != blank %}
-  <a href="{{ cartmend_edit_url }}" class="button__text" style="margin-left: 10px;">Edit your order</a>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 10px;">
+    <tr>
+      <td class="button__cell" style="padding: 12px 18px; text-align: center; background-color: #ffffff; border: 1.5px solid #d1d5db; border-radius: 4px;">
+        <a href="{{ cartmend_edit_url }}" class="button__text" style="color: #1f2937; text-decoration: none; font-weight: 600; font-size: 15px; display: block;">Edit your order</a>
+      </td>
+    </tr>
+  </table>
+{% endif %}`;
+
+const CARTMEND_EMAIL_LIQUID_STANDARD = `{% comment %} CartMend - Edit your order button {% endcomment %}
+{% assign cm_shop = shop.permanent_domain | default: shop.myshopify_domain | default: shop.domain %}
+{% if cm_shop == blank and shop.url != blank %}
+  {% assign cm_shop = shop.url | remove: "https://" | remove: "http://" | split: "/" | first %}
+{% endif %}
+{% assign cm_order_id = order.id | default: id | default: "preview_order" %}
+
+{% assign cartmend_edit_url = order.metafields.cartmend.edit_url %}
+{% if cartmend_edit_url == blank and cm_shop != blank %}
+  {% capture cartmend_edit_url %}https://{{ cm_shop }}/apps/cartmend/api/customer/post-purchase/edit-session?order_id={{ cm_order_id }}&shop={{ cm_shop }}&redirect=1{% endcapture %}
+{% endif %}
+
+{% if cartmend_edit_url != blank %}
+  <td valign="middle" style="padding-left: 10px; vertical-align: middle;">
+    <table class="button" style="border: 1.5px solid #d1d5db; border-radius: 4px; background: #ffffff;">
+      <tr>
+        <td class="button__cell" style="padding: 10px 18px; background: #ffffff;">
+          <a href="{{ cartmend_edit_url }}" class="button__text" style="color: #1f2937; text-decoration: none; font-weight: 600; white-space: nowrap;">Edit your order</a>
+        </td>
+      </tr>
+    </table>
+  </td>
 {% endif %}`;
 
 function formatDate(dateInput?: string | Date | null): string {
@@ -704,7 +736,9 @@ export default function CartMendDashboard() {
   const [breakdownType, setBreakdownType] = useState<"count" | "percentage">("count");
   const [selectedActivity, setSelectedActivity] = useState<typeof activities[0] | null>(null);
 
-  const [copiedLiquid, setCopiedLiquid] = useState(false);
+  const [emailGuideTab, setEmailGuideTab] = useState<"shop_app" | "standard">("shop_app");
+  const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
+
   const isEmailSetupDone = fetcher.data && "emailSetupCompleted" in fetcher.data
     ? Boolean((fetcher.data as any).emailSetupCompleted)
     : isEmailSetupCompleted;
@@ -713,12 +747,12 @@ export default function CartMendDashboard() {
     ? Boolean((fetcher.data as any).thankYouSetupCompleted)
     : isThankYouSetupCompleted;
 
-  const handleCopyCode = () => {
+  const handleCopyCode = (codeText: string, key: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(CARTMEND_EMAIL_LIQUID).then(() => {
-        setCopiedLiquid(true);
+      navigator.clipboard.writeText(codeText).then(() => {
+        setCopiedCodeKey(key);
         shopify.toast.show("Liquid code copied to clipboard!");
-        setTimeout(() => setCopiedLiquid(false), 2500);
+        setTimeout(() => setCopiedCodeKey(null), 2500);
       });
     }
   };
@@ -1619,10 +1653,51 @@ export default function CartMendDashboard() {
               {/* Step 1 */}
               <div className="cm-setup-step">
                 <div className="cm-setup-step-bubble">1</div>
-                <h4 className="cm-setup-step-title">Copy the CartMend code</h4>
+                <h4 className="cm-setup-step-title">Choose your template layout &amp; copy code</h4>
                 <p className="cm-setup-step-desc">
-                  Copy the code below. You only need to do this once for this store.
+                  Select the option that matches your store's confirmation email layout:
                 </p>
+
+                {/* Option Toggle Tabs */}
+                <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => setEmailGuideTab("shop_app")}
+                    className={emailGuideTab === "shop_app" ? "cm-btn-primary" : "cm-btn-outline"}
+                    style={{
+                      padding: "6px 14px",
+                      fontSize: "12.5px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      width: "auto",
+                      backgroundColor: emailGuideTab === "shop_app" ? "#008060" : "#ffffff",
+                      borderColor: emailGuideTab === "shop_app" ? "#008060" : "#d1d5db",
+                      color: emailGuideTab === "shop_app" ? "#ffffff" : "#374151",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Option 1: With "Track order with Shop" (Default)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEmailGuideTab("standard")}
+                    className={emailGuideTab === "standard" ? "cm-btn-primary" : "cm-btn-outline"}
+                    style={{
+                      padding: "6px 14px",
+                      fontSize: "12.5px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      width: "auto",
+                      backgroundColor: emailGuideTab === "standard" ? "#008060" : "#ffffff",
+                      borderColor: emailGuideTab === "standard" ? "#008060" : "#d1d5db",
+                      color: emailGuideTab === "standard" ? "#ffffff" : "#374151",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Option 2: Single "View your order" only
+                  </button>
+                </div>
+
                 <div className="cm-liquid-code-box">
                   <div className="cm-liquid-code-header">
                     <span className="cm-liquid-badge">
@@ -1630,15 +1705,22 @@ export default function CartMendDashboard() {
                         <polyline points="16 18 22 12 16 6" />
                         <polyline points="8 6 2 12 8 18" />
                       </svg>
-                      CartMend Liquid
+                      {emailGuideTab === "shop_app" ? "Option 1 Code (Shop App)" : "Option 2 Code (Standard)"}
                     </span>
                     <button
                       type="button"
-                      onClick={handleCopyCode}
-                      className={`cm-liquid-copy-btn ${copiedLiquid ? "copied" : ""}`}
+                      onClick={() =>
+                        handleCopyCode(
+                          emailGuideTab === "shop_app"
+                            ? CARTMEND_EMAIL_LIQUID_SHOP_APP
+                            : CARTMEND_EMAIL_LIQUID_STANDARD,
+                          emailGuideTab
+                        )
+                      }
+                      className={`cm-liquid-copy-btn ${copiedCodeKey === emailGuideTab ? "copied" : ""}`}
                       aria-label="Copy CartMend Liquid Code"
                     >
-                      {copiedLiquid ? (
+                      {copiedCodeKey === emailGuideTab ? (
                         <>
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <polyline points="20 6 9 17 4 12" />
@@ -1656,7 +1738,11 @@ export default function CartMendDashboard() {
                       )}
                     </button>
                   </div>
-                  <pre className="cm-liquid-code-body">{CARTMEND_EMAIL_LIQUID}</pre>
+                  <pre className="cm-liquid-code-body">
+                    {emailGuideTab === "shop_app"
+                      ? CARTMEND_EMAIL_LIQUID_SHOP_APP
+                      : CARTMEND_EMAIL_LIQUID_STANDARD}
+                  </pre>
                 </div>
               </div>
 
@@ -1696,26 +1782,54 @@ export default function CartMendDashboard() {
               <div className="cm-setup-step">
                 <div className="cm-setup-step-bubble">3</div>
                 <h4 className="cm-setup-step-title">Paste the code into your Order Confirmation email</h4>
-                <div className="cm-pathway-box">
-                  <span className="cm-pathway-node">Shopify Admin</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node">Settings</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node">Notifications</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node">Order confirmation</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node">Edit code</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node">Find "View your order"</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node">Paste CartMend code below it</span>
-                  <span className="cm-pathway-arrow">→</span>
-                  <span className="cm-pathway-node" style={{ background: "#f0fdf4", borderColor: "#86efac", color: "#166534" }}>Save</span>
-                </div>
-                <div className="cm-tip-note">
-                  <strong>Tip:</strong> Keep Shopify's existing "View your order" button. Add the CartMend code below it.
-                </div>
+                
+                {emailGuideTab === "shop_app" ? (
+                  <>
+                    <div className="cm-pathway-box">
+                      <span className="cm-pathway-node">Shopify Admin</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Settings</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Notifications</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Order confirmation</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Edit code</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Find &lt;/table&gt; of actions-buttons (~line 200–225)</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Paste Option 1 code directly below it</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node" style={{ background: "#f0fdf4", borderColor: "#86efac", color: "#166534" }}>Save</span>
+                    </div>
+                    <div className="cm-tip-note">
+                      <strong>Where to paste for Option 1:</strong> Find the <code>&lt;table class="actions-buttons"...&gt;...&lt;/table&gt;</code> containing "Track order with Shop" and paste the code directly below that closing <code>&lt;/table&gt;</code> tag (before <code>&lt;div class="actions__group"&gt;</code>).
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="cm-pathway-box">
+                      <span className="cm-pathway-node">Shopify Admin</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Settings</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Notifications</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Order confirmation</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Edit code</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Find &lt;td&gt; of View your order (~line 275–285)</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node">Paste Option 2 code right after that &lt;/td&gt;</span>
+                      <span className="cm-pathway-arrow">→</span>
+                      <span className="cm-pathway-node" style={{ background: "#f0fdf4", borderColor: "#86efac", color: "#166534" }}>Save</span>
+                    </div>
+                    <div className="cm-tip-note">
+                      <strong>Where to paste for Option 2:</strong> Find the <code>&lt;td class="button__cell"&gt;&lt;a ...&gt;View your order&lt;/a&gt;&lt;/td&gt;</code> inside the standard action row and paste the code right after that closing <code>&lt;/td&gt;</code>.
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Step 4 */}
@@ -1775,10 +1889,9 @@ export default function CartMendDashboard() {
               <summary className="cm-troubleshooting-summary">Having trouble?</summary>
               <ul className="cm-troubleshooting-list">
                 <li>Make sure you are editing the <strong>Order confirmation</strong> notification template in Shopify Admin.</li>
-                <li>Keep Shopify's existing <strong>View your order</strong> button — paste the CartMend code right next to or below it.</li>
-                <li>Paste the CartMend code below the existing order action table cell.</li>
-                <li>Save the notification template after pasting.</li>
-                <li>Place a test order on your storefront to verify the <strong>Edit your order</strong> button appears in the confirmation email.</li>
+                <li>If your preview shows the purple <strong>Track order with Shop</strong> button, use <strong>Option 1</strong> and paste it under <code>&lt;table class="actions-buttons"&gt;...&lt;/table&gt;</code> (around line 200–225).</li>
+                <li>If your preview only has a single <strong>View your order</strong> button, use <strong>Option 2</strong> and paste it right after the closing <code>&lt;/td&gt;</code> of the View your order cell (around line 275–285).</li>
+                <li>Save the notification template in Shopify after pasting and click <strong>Preview</strong> to verify.</li>
               </ul>
             </details>
           </div>
