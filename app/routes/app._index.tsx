@@ -725,11 +725,21 @@ export default function CartMendDashboard() {
       shopify.toast.show(fetcher.data.message);
       if ("isActivated" in fetcher.data && (fetcher.data as any).isActivated) {
         setActiveTab("dashboard");
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
       }
     }
   }, [fetcher.data, shopify]);
 
   const handleToggleActivation = () => {
+    const nextStatus = !isActivated;
+    if (nextStatus) {
+      setActiveTab("dashboard");
+      if (typeof window !== "undefined") {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
     fetcher.submit(
       { intent: "toggle_activation", currentStatus: String(isActivated) },
       { method: "POST" }
@@ -1273,12 +1283,8 @@ export default function CartMendDashboard() {
                           <span className="cm-step-num">3</span>
                           <span className="cm-step-title">Connect confirmation email</span>
                         </div>
-                        {isEmailSetupDone ? (
+                        {isEmailSetupDone && (
                           <span className="cm-badge-completed">Complete ✓</span>
-                        ) : (
-                          <span className="cm-badge-inactive" style={{ background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>
-                            Not completed
-                          </span>
                         )}
                       </div>
                       <p className="cm-step-desc">
@@ -1515,12 +1521,8 @@ export default function CartMendDashboard() {
                   Let customers edit their order directly from the Shopify order confirmation email.
                 </p>
               </div>
-              {isEmailSetupDone ? (
+              {isEmailSetupDone && (
                 <span className="cm-badge-completed">Setup marked complete ✓</span>
-              ) : (
-                <span className="cm-badge-inactive" style={{ background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>
-                  Email setup not completed
-                </span>
               )}
             </div>
 
