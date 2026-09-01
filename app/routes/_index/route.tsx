@@ -1,33 +1,23 @@
 import { useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, redirect, useActionData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
+import { Form, redirect, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
-  const host = url.searchParams.get("host");
-  const embedded = url.searchParams.get("embedded");
-  const idToken = url.searchParams.get("id_token");
-  const session = url.searchParams.get("session");
 
-  // If this request originates from Shopify Admin (has shop, host, embedded, or session token),
-  // forward immediately to the embedded /app layout without showing the public landing page.
-  if (shop || host || embedded || idToken || session) {
-    return redirect(`/app?${url.searchParams.toString()}`);
+  if (url.searchParams.get("shop")) {
+    throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return null;
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  return await login(request);
+  return { showForm: Boolean(login) };
 };
 
 export default function Index() {
-  const actionData = useActionData<{ shop?: string }>();
+  const { showForm } = useLoaderData<typeof loader>();
   const [shopInput, setShopInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   return (
     <div style={styles.container}>
@@ -91,50 +81,50 @@ export default function Index() {
             Enter your <strong>.myshopify.com</strong> domain to install or sign in to CartMend.
           </p>
 
-          <Form
-            method="post"
-            style={styles.form}
-            onSubmit={() => setIsSubmitting(true)}
-          >
-            <div style={styles.inputGroup}>
-              <label htmlFor="shop" style={styles.label}>
-                Store Domain
-              </label>
-              <div style={styles.inputWrapper}>
-                <input
-                  id="shop"
-                  name="shop"
-                  type="text"
-                  placeholder="your-store-name.myshopify.com"
-                  value={shopInput}
-                  onChange={(e) => setShopInput(e.target.value)}
-                  style={styles.input}
-                  required
-                  autoComplete="off"
-                  autoFocus
-                />
-              </div>
-              {actionData?.shop && (
-                <p style={styles.errorText}>Please enter a valid Shopify store domain.</p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting || !shopInput.trim()}
-              style={{
-                ...styles.button,
-                opacity: isSubmitting || !shopInput.trim() ? 0.7 : 1,
-                cursor: isSubmitting || !shopInput.trim() ? "not-allowed" : "pointer",
-              }}
+          {showForm && (
+            <Form
+              method="post"
+              action="/auth/login"
+              style={styles.form}
+              onSubmit={() => setIsSubmitting(true)}
             >
-              {isSubmitting ? (
-                <span>Connecting to Shopify...</span>
-              ) : (
-                <span>Install / Log In to App →</span>
-              )}
-            </button>
-          </Form>
+              <div style={styles.inputGroup}>
+                <label htmlFor="shop" style={styles.label}>
+                  Store Domain
+                </label>
+                <div style={styles.inputWrapper}>
+                  <input
+                    id="shop"
+                    name="shop"
+                    type="text"
+                    placeholder="your-store-name.myshopify.com"
+                    value={shopInput}
+                    onChange={(e) => setShopInput(e.target.value)}
+                    style={styles.input}
+                    required
+                    autoComplete="off"
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !shopInput.trim()}
+                style={{
+                  ...styles.button,
+                  opacity: isSubmitting || !shopInput.trim() ? 0.7 : 1,
+                  cursor: isSubmitting || !shopInput.trim() ? "not-allowed" : "pointer",
+                }}
+              >
+                {isSubmitting ? (
+                  <span>Connecting to Shopify...</span>
+                ) : (
+                  <span>Install / Log In to App →</span>
+                )}
+              </button>
+            </Form>
+          )}
 
           {/* Quick info badges */}
           <div style={styles.featuresGrid}>
