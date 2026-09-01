@@ -579,6 +579,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     appSettings,
     isRulesConfigured,
     isEmailSetupCompleted: Boolean(merchantSettings.sendEditLinkEmail),
+    isThankYouSetupCompleted: Boolean(merchantSettings.notifyCustomer),
     kpis: {
       totalEdits: totalEditsCount,
       cancellations: cancellationsCount,
@@ -637,6 +638,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  if (intent === "toggle_thankyou_setup") {
+    const isCompleted = formData.get("isCompleted") === "true";
+    await updateMerchantSettings(shopDomain, { notifyCustomer: isCompleted });
+    return {
+      success: true,
+      thankYouSetupCompleted: isCompleted,
+      message: isCompleted
+        ? "Thank You page extension marked as added!"
+        : "Thank You page setup status updated.",
+    };
+  }
+
   if (intent === "create_test_session") {
     const orderId = String(formData.get("orderId") || "");
     const orderName = String(formData.get("orderName") || `#${orderId}`);
@@ -674,6 +687,7 @@ export default function CartMendDashboard() {
     appSettings,
     isRulesConfigured,
     isEmailSetupCompleted,
+    isThankYouSetupCompleted,
     kpis,
     chartDays,
     breakdownData,
@@ -695,6 +709,10 @@ export default function CartMendDashboard() {
     ? Boolean((fetcher.data as any).emailSetupCompleted)
     : isEmailSetupCompleted;
 
+  const isThankYouSetupDone = fetcher.data && "thankYouSetupCompleted" in fetcher.data
+    ? Boolean((fetcher.data as any).thankYouSetupCompleted)
+    : isThankYouSetupCompleted;
+
   const handleCopyCode = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(CARTMEND_EMAIL_LIQUID).then(() => {
@@ -708,6 +726,13 @@ export default function CartMendDashboard() {
   const handleToggleEmailSetup = (checked: boolean) => {
     fetcher.submit(
       { intent: "toggle_email_setup", isCompleted: String(checked) },
+      { method: "POST" }
+    );
+  };
+
+  const handleToggleThankYouSetup = (checked: boolean) => {
+    fetcher.submit(
+      { intent: "toggle_thankyou_setup", isCompleted: String(checked) },
       { method: "POST" }
     );
   };
@@ -1198,7 +1223,7 @@ export default function CartMendDashboard() {
           <div className="cm-dashboard-grid">
             {/* Left Column: Stepper */}
             <div className="cm-card">
-              <h2 className="cm-card-title">Get started in 4 simple steps</h2>
+              <h2 className="cm-card-title">Get started in 5 simple steps</h2>
 
               <div className="cm-stepper">
                 {/* Step 1: Install */}
@@ -1307,7 +1332,53 @@ export default function CartMendDashboard() {
                   </div>
                 </div>
 
-                {/* Step 4: Activate */}
+                {/* Step 4: Add Thank You Page Extension */}
+                <div className="cm-step-item">
+                  <div className="cm-step-left">
+                    <div className={`cm-step-icon-circle ${isThankYouSetupDone ? "completed" : ""}`}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <polyline points="10 9 9 9 8 9" />
+                      </svg>
+                    </div>
+                    <div className="cm-step-line" />
+                  </div>
+
+                  <div className="cm-step-right">
+                    <div className="cm-step-content">
+                      <div className="cm-step-header">
+                        <div className="cm-step-number-title">
+                          <span className="cm-step-num">4</span>
+                          <span className="cm-step-title">Add to Thank You page</span>
+                        </div>
+                        {isThankYouSetupDone && (
+                          <span className="cm-badge-completed">Complete ✓</span>
+                        )}
+                      </div>
+                      <p className="cm-step-desc">
+                        Add the CartMend app block in Shopify Checkout &amp; Thank You editor.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById("cm-thankyou-setup-section");
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
+                      }}
+                      className="cm-btn-edit-rules"
+                      style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      Add extension
+                    </button>
+                  </div>
+                </div>
+
+                {/* Step 5: Activate */}
                 <div className="cm-step-item">
                   <div className="cm-step-left">
                     <div className="cm-step-icon-circle">
@@ -1322,7 +1393,7 @@ export default function CartMendDashboard() {
                     <div className="cm-step-content">
                       <div className="cm-step-header">
                         <div className="cm-step-number-title">
-                          <span className="cm-step-num">4</span>
+                          <span className="cm-step-num">5</span>
                           <span className="cm-step-title">Activate CartMend</span>
                         </div>
                         {isActivated && <span className="cm-badge-completed">Active</span>}
@@ -1708,6 +1779,141 @@ export default function CartMendDashboard() {
                 <li>Paste the CartMend code below the existing order action table cell.</li>
                 <li>Save the notification template after pasting.</li>
                 <li>Place a test order on your storefront to verify the <strong>Edit your order</strong> button appears in the confirmation email.</li>
+              </ul>
+            </details>
+          </div>
+
+          {/* Dedicated Thank You Page Extension Setup Card */}
+          <div id="cm-thankyou-setup-section" className="cm-email-setup-card" style={{ marginTop: "24px" }}>
+            <div className="cm-email-header-flex">
+              <div>
+                <h3 className="cm-email-title">Add CartMend to Thank You &amp; Order Status pages</h3>
+                <p className="cm-email-subtitle">
+                  Let customers edit, swap items, or cancel immediately on the post-checkout order confirmation screen.
+                </p>
+              </div>
+              {isThankYouSetupDone && (
+                <span className="cm-badge-completed">Setup marked complete ✓</span>
+              )}
+            </div>
+
+            {/* Callout */}
+            <div className="cm-info-callout">
+              <div className="cm-info-callout-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="cm-info-callout-title">Native Shopify Checkout Extensibility</h4>
+                <p className="cm-info-callout-text">
+                  CartMend renders natively inside Shopify Checkout on both the Thank You and Customer Account Order Status pages so shoppers can fix typos or change sizes right after placing their order.
+                </p>
+              </div>
+            </div>
+
+            {/* Step by step flow */}
+            <div className="cm-setup-flow">
+              {/* Step 1 */}
+              <div className="cm-setup-step">
+                <div className="cm-setup-step-bubble">1</div>
+                <h4 className="cm-setup-step-title">Open Shopify Checkout Customizer</h4>
+                <p className="cm-setup-step-desc">
+                  Go to Shopify Admin → Settings → Checkout → Customize.
+                </p>
+                <div>
+                  <a
+                    href={`https://${shop}/admin/settings/checkout`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cm-btn-primary"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      width: "auto",
+                      padding: "8px 16px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <span>Open Checkout settings</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="cm-setup-step">
+                <div className="cm-setup-step-bubble">2</div>
+                <h4 className="cm-setup-step-title">Switch page to "Thank you" or "Order status"</h4>
+                <p className="cm-setup-step-desc">
+                  At the top center of the Shopify customizer, click the page selector dropdown and select <strong>Thank you</strong> (or <strong>Order status</strong>).
+                </p>
+              </div>
+
+              {/* Step 3 */}
+              <div className="cm-setup-step">
+                <div className="cm-setup-step-bubble">3</div>
+                <h4 className="cm-setup-step-title">Add the CartMend app block</h4>
+                <div className="cm-pathway-box">
+                  <span className="cm-pathway-node">Sections (Left Panel)</span>
+                  <span className="cm-pathway-arrow">→</span>
+                  <span className="cm-pathway-node">Main or Order details</span>
+                  <span className="cm-pathway-arrow">→</span>
+                  <span className="cm-pathway-node">+ Add block</span>
+                  <span className="cm-pathway-arrow">→</span>
+                  <span className="cm-pathway-node">CartMend Post-Purchase Actions</span>
+                  <span className="cm-pathway-arrow">→</span>
+                  <span className="cm-pathway-node" style={{ background: "#f0fdf4", borderColor: "#86efac", color: "#166534" }}>Save</span>
+                </div>
+                <div className="cm-tip-note">
+                  <strong>Tip:</strong> You can place the CartMend block in the Main section or under Order details.
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="cm-setup-step" style={{ borderLeftColor: "transparent" }}>
+                <div className="cm-setup-step-bubble">4</div>
+                <h4 className="cm-setup-step-title">Confirm &amp; Save</h4>
+                <p className="cm-setup-step-desc">
+                  Click <strong>Save</strong> in the top-right corner of the Shopify customizer.
+                </p>
+
+                <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <label className="cm-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(isThankYouSetupDone)}
+                      onChange={(e) => handleToggleThankYouSetup(e.target.checked)}
+                      style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#008060" }}
+                    />
+                    <span>I've added the CartMend block to my Thank You page</span>
+                  </label>
+
+                  {isThankYouSetupDone && (
+                    <div style={{ fontSize: "12.5px", color: "#16a34a", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>✓ Setup marked complete</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsible Troubleshooting Section */}
+            <details className="cm-troubleshooting-details">
+              <summary className="cm-troubleshooting-summary">Extension troubleshooting</summary>
+              <ul className="cm-troubleshooting-list">
+                <li>Ensure your store uses Shopify Checkout Extensibility (default for all new Shopify stores).</li>
+                <li>In the Checkout editor, make sure you selected the <strong>Thank you</strong> or <strong>Order status</strong> page from the top dropdown before clicking <strong>+ Add block</strong>.</li>
+                <li>Click <strong>Save</strong> in the top right after adding the CartMend block.</li>
               </ul>
             </details>
           </div>
