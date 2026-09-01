@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { Form, redirect, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
@@ -6,8 +6,13 @@ import { login } from "../../shopify.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
-  if (url.searchParams.get("shop")) {
-    throw redirect(`/app?${url.searchParams.toString()}`);
+  if (
+    url.searchParams.get("shop") ||
+    url.searchParams.get("host") ||
+    url.searchParams.get("embedded") ||
+    url.searchParams.get("id_token")
+  ) {
+    return redirect(`/app?${url.searchParams.toString()}`);
   }
 
   return { showForm: Boolean(login) };
@@ -17,6 +22,16 @@ export default function Index() {
   const { showForm } = useLoaderData<typeof loader>();
   const [shopInput, setShopInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isEmbedded = window.self !== window.top;
+      const search = window.location.search;
+      if (isEmbedded || search.includes("shop=") || search.includes("host=") || search.includes("embedded=")) {
+        window.location.replace(`/app${search}`);
+      }
+    }
+  }, []);
 
 
   return (
