@@ -6,13 +6,13 @@ declare global {
 }
 
 const prisma =
-  global.prismaGlobal ??
+  globalThis.prismaGlobal ??
   new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") {
-  global.prismaGlobal = prisma;
-}
+// Always cache the client globally to prevent connection leaks across serverless warm starts
+globalThis.prismaGlobal = prisma;
 
 export default prisma;
+
