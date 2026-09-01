@@ -715,7 +715,10 @@ export default function CartMendDashboard() {
   const isActivated = fetcher.data && "isActivated" in fetcher.data
     ? (fetcher.data as any).isActivated
     : merchantSettings.editingEnabled;
-  const [activeTab, setActiveTab] = useState<"dashboard" | "onboarding">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "onboarding">(
+    isActivated ? "dashboard" : "onboarding"
+  );
+
 
   useEffect(() => {
     if (fetcher.data?.message) {
@@ -1282,21 +1285,19 @@ export default function CartMendDashboard() {
                         Add "Edit your order" button to Shopify's Order Confirmation email.
                       </p>
                     </div>
-                    {!isEmailSetupDone && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const el = document.getElementById("cm-email-setup-section");
-                          if (el) {
-                            el.scrollIntoView({ behavior: "smooth", block: "start" });
-                          }
-                        }}
-                        className="cm-btn-edit-rules"
-                        style={{ cursor: "pointer", whiteSpace: "nowrap" }}
-                      >
-                        Connect email
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById("cm-email-setup-section");
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
+                      }}
+                      className="cm-btn-edit-rules"
+                      style={{ cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      Connect email
+                    </button>
                   </div>
                 </div>
 
