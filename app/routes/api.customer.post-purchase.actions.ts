@@ -1,20 +1,28 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { PostPurchaseActionService } from "../services/post-purchase-action.server";
 import prisma from "../db.server";
 
-export async function action({ request }: ActionFunctionArgs) {
-  if (request.method !== "POST" && request.method !== "OPTIONS") {
-    return new Response("Method Not Allowed", { status: 405 });
-  }
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, x-shopify-shop-domain",
+};
 
+export async function loader({ request }: LoaderFunctionArgs) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, x-shopify-shop-domain",
-      },
+      headers: CORS_HEADERS,
+    });
+  }
+  return Response.json({ status: "ok" }, { headers: CORS_HEADERS });
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
     });
   }
 
