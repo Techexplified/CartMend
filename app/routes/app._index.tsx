@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -632,8 +632,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const url = new URL(request.url);
   const rulesConfiguredParam = url.searchParams.get("rulesConfigured") === "true";
-  const rulesSavedInDb = appSettings.supportEmail && appSettings.supportEmail.includes("rulesConfigured");
-  const isRulesConfigured = rulesConfiguredParam || Boolean(rulesSavedInDb);
+
+  let supportConfig: any = null;
+  try {
+    if (appSettings?.supportEmail && appSettings.supportEmail.startsWith("{")) {
+      supportConfig = JSON.parse(appSettings.supportEmail);
+    }
+  } catch {
+    supportConfig = null;
+  }
+
+  const isRulesConfigured = rulesConfiguredParam || Boolean(supportConfig?.rulesConfigured) || (appSettings?.supportEmail ? appSettings.supportEmail.includes("rulesConfigured:true") : false);
+  const isEmailSetupCompleted = Boolean(supportConfig?.emailSetupCompleted) || (appSettings?.supportEmail ? appSettings.supportEmail.includes("emailSetup:true") : false);
+  const isThankYouSetupCompleted = Boolean(supportConfig?.thankYouSetupCompleted) || (appSettings?.supportEmail ? appSettings.supportEmail.includes("thankYouSetup:true") : false);
 
   return {
     shop: cleanDomain,
@@ -641,8 +652,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     merchantSettings,
     appSettings,
     isRulesConfigured,
-    isEmailSetupCompleted: Boolean(merchantSettings.sendEditLinkEmail),
-    isThankYouSetupCompleted: Boolean(merchantSettings.notifyCustomer),
+    isEmailSetupCompleted,
+    isThankYouSetupCompleted,
     kpis: {
       totalEdits: totalEditsCount,
       cancellations: cancellationsCount,
@@ -691,7 +702,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "toggle_email_setup") {
     const isCompleted = formData.get("isCompleted") === "true";
-    await updateMerchantSettings(shopDomain, { sendEditLinkEmail: isCompleted });
+    const currentSettings = await prisma.appSettings.findUnique({ where: { shop: shopDomain } });
+    let configObj: any = {};
+    try {
+      if (currentSettings?.supportEmail && currentSettings.supportEmail.startsWith("{")) {
+        configObj = JSON.parse(currentSettings.supportEmail);
+      }
+    } catch {
+      configObj = {};
+    }
+    configObj.emailSetupCompleted = isCompleted;
+
+    await prisma.appSettings.update({
+      where: { shop: shopDomain },
+      data: { supportEmail: JSON.stringify(configObj) },
+    });
+
     return {
       success: true,
       emailSetupCompleted: isCompleted,
@@ -703,7 +729,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "toggle_thankyou_setup") {
     const isCompleted = formData.get("isCompleted") === "true";
-    await updateMerchantSettings(shopDomain, { notifyCustomer: isCompleted });
+    const currentSettings = await prisma.appSettings.findUnique({ where: { shop: shopDomain } });
+    let configObj: any = {};
+    try {
+      if (currentSettings?.supportEmail && currentSettings.supportEmail.startsWith("{")) {
+        configObj = JSON.parse(currentSettings.supportEmail);
+      }
+    } catch {
+      configObj = {};
+    }
+    configObj.thankYouSetupCompleted = isCompleted;
+
+    await prisma.appSettings.update({
+      where: { shop: shopDomain },
+      data: { supportEmail: JSON.stringify(configObj) },
+    });
+
     return {
       success: true,
       thankYouSetupCompleted: isCompleted,
@@ -767,8 +808,142 @@ export default function CartMendDashboard() {
   const [breakdownType, setBreakdownType] = useState<"count" | "percentage">("count");
   const [selectedActivity, setSelectedActivity] = useState<typeof activities[0] | null>(null);
 
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setIsDatePickerOpen(false);
+      }
+    }
+    if (isDatePickerOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDatePickerOpen]);
+
+  const filteredActivities = useMemo(() => {
+    return activities.filter((act) => {
+      const actTime = new Date(act.rawDate).getTime();
+      const now = Date.now();
+      if (dateRange === "Today") {
+        return now - actTime <= 24 * 60 * 60 * 1000;
+      } else if (dateRange === "Last 7 Days") {
+        return now - actTime <= 7 * 24 * 60 * 60 * 1000;
+      } else if (dateRange === "Last 30 Days") {
+        return now - actTime <= 30 * 24 * 60 * 60 * 1000;
+      } else if (dateRange === "Last 90 Days") {
+        return now - actTime <= 90 * 24 * 60 * 60 * 1000;
+      }
+      return true; // "All time"
+    });
+  }, [activities, dateRange]);
+
+  const dynamicKpis = useMemo(() => {
+    const totalEdits = filteredActivities.filter(
+      (a) => a.actionCategory === "item" || a.actionCategory === "address" || a.actionCategory === "quantity"
+    ).length;
+
+    const cancellations = filteredActivities.filter(
+      (a) => a.actionCategory === "cancel" || a.actionType.toLowerCase().includes("cancel")
+    ).length;
+
+    let additionalPayments = 0;
+    let refundsIssued = 0;
+    let additionalPaymentsCount = 0;
+    let refundsIssuedCount = 0;
+
+    for (const act of filteredActivities) {
+      if (act.amountImpactValue > 0) {
+        additionalPayments += act.amountImpactValue;
+        additionalPaymentsCount += 1;
+      } else if (act.amountImpactValue < 0) {
+        refundsIssued += Math.abs(act.amountImpactValue);
+        refundsIssuedCount += 1;
+      }
+    }
+
+    return {
+      totalEdits,
+      cancellations,
+      additionalPayments,
+      refundsIssued,
+      additionalPaymentsCount,
+      refundsIssuedCount,
+      currencySymbol: kpis.currencySymbol,
+    };
+  }, [filteredActivities, kpis.currencySymbol]);
+
+  const dynamicBreakdownData = useMemo(() => {
+    const total = dynamicKpis.totalEdits + dynamicKpis.cancellations;
+    let countAddress = 0;
+    let countVariant = 0;
+    let countQuantity = 0;
+    let countCancel = dynamicKpis.cancellations;
+
+    for (const act of filteredActivities) {
+      if (act.actionCategory === "address") countAddress += 1;
+      else if (act.actionCategory === "item") countVariant += 1;
+      else if (act.actionCategory === "quantity") countQuantity += 1;
+    }
+
+    const calcPct = (cnt: number) => (total > 0 ? ((cnt / total) * 100).toFixed(1) : "0.0");
+
+    return {
+      total,
+      address: { count: countAddress, percentage: calcPct(countAddress) },
+      variant: { count: countVariant, percentage: calcPct(countVariant) },
+      quantity: { count: countQuantity, percentage: calcPct(countQuantity) },
+      cancel: { count: countCancel, percentage: calcPct(countCancel) },
+    };
+  }, [filteredActivities, dynamicKpis]);
+
+  const dynamicChartDays = useMemo(() => {
+    const numDays = dateRange === "Today" ? 1 : dateRange === "Last 7 Days" ? 7 : dateRange === "Last 30 Days" ? 30 : dateRange === "Last 90 Days" ? 90 : 7;
+    const now = new Date();
+    const days: { day: string; edits: number; cancellations: number; dateStr: string }[] = [];
+
+    const displayCount = numDays <= 7 ? numDays : 7;
+    for (let i = displayCount - 1; i >= 0; i--) {
+      const d = new Date(now);
+      const step = numDays <= 7 ? i : Math.round((i * numDays) / 7);
+      d.setDate(d.getDate() - step);
+      const dayName = numDays <= 7 ? d.toLocaleDateString("en-US", { weekday: "short" }) : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      days.push({
+        day: dayName,
+        edits: 0,
+        cancellations: 0,
+        dateStr: d.toISOString().split("T")[0],
+      });
+    }
+
+    for (const act of filteredActivities) {
+      const actDateStr = act.rawDate.split("T")[0];
+      const found = days.find((d) => d.dateStr === actDateStr);
+      if (found) {
+        if (act.actionCategory === "cancel" || act.actionType.toLowerCase().includes("cancel")) {
+          found.cancellations += 1;
+        } else if (act.actionCategory === "item" || act.actionCategory === "address" || act.actionCategory === "quantity") {
+          found.edits += 1;
+        }
+      } else if (days.length > 0) {
+        if (act.actionCategory === "cancel" || act.actionType.toLowerCase().includes("cancel")) {
+          days[days.length - 1].cancellations += 1;
+        } else if (act.actionCategory === "item" || act.actionCategory === "address" || act.actionCategory === "quantity") {
+          days[days.length - 1].edits += 1;
+        }
+      }
+    }
+
+    return days;
+  }, [filteredActivities, dateRange]);
+
   const [emailGuideTab, setEmailGuideTab] = useState<"shop_app" | "standard">("shop_app");
   const [copiedCodeKey, setCopiedCodeKey] = useState<string | null>(null);
+
+  const isRulesDone = isRulesConfigured;
 
   const isEmailSetupDone = fetcher.data && "emailSetupCompleted" in fetcher.data
     ? Boolean((fetcher.data as any).emailSetupCompleted)
@@ -809,7 +984,6 @@ export default function CartMendDashboard() {
     isActivated ? "dashboard" : "onboarding"
   );
 
-
   useEffect(() => {
     if (fetcher.data?.message) {
       shopify.toast.show(fetcher.data.message);
@@ -842,11 +1016,11 @@ export default function CartMendDashboard() {
   const paddingX = 35;
   const paddingY = 25;
 
-  const maxValInSeries = Math.max(...chartDays.map((d) => (chartMetric === "cancellations" ? d.cancellations : d.edits)), 0);
+  const maxValInSeries = Math.max(...dynamicChartDays.map((d) => (chartMetric === "cancellations" ? d.cancellations : d.edits)), 0);
   const maxY = Math.max(maxValInSeries > 0 ? Math.ceil(maxValInSeries * 1.3) : 10, 5);
 
-  const points = chartDays.map((d, index) => {
-    const x = paddingX + (index * (svgWidth - paddingX * 2)) / Math.max(chartDays.length - 1, 1);
+  const points = dynamicChartDays.map((d, index) => {
+    const x = paddingX + (index * (svgWidth - paddingX * 2)) / Math.max(dynamicChartDays.length - 1, 1);
     const val = chartMetric === "cancellations" ? d.cancellations : d.edits;
     const y = svgHeight - paddingY - (val / maxY) * (svgHeight - paddingY * 2);
     return { x, y, val, day: d.day };
@@ -856,11 +1030,11 @@ export default function CartMendDashboard() {
   const areaD = points.length > 0 ? `${pathD} L ${points[points.length - 1].x} ${svgHeight - paddingY} L ${points[0].x} ${svgHeight - paddingY} Z` : "";
 
   // Dynamic SVG Donut Chart Calculation
-  const totalBd = breakdownData.total || 0;
-  const pAddress = totalBd > 0 ? parseFloat(breakdownData.address.percentage) : 0;
-  const pVariant = totalBd > 0 ? parseFloat(breakdownData.variant.percentage) : 0;
-  const pQuantity = totalBd > 0 ? parseFloat(breakdownData.quantity.percentage) : 0;
-  const pCancel = totalBd > 0 ? parseFloat(breakdownData.cancel.percentage) : 0;
+  const totalBd = dynamicBreakdownData.total || 0;
+  const pAddress = totalBd > 0 ? parseFloat(dynamicBreakdownData.address.percentage) : 0;
+  const pVariant = totalBd > 0 ? parseFloat(dynamicBreakdownData.variant.percentage) : 0;
+  const pQuantity = totalBd > 0 ? parseFloat(dynamicBreakdownData.quantity.percentage) : 0;
+  const pCancel = totalBd > 0 ? parseFloat(dynamicBreakdownData.cancel.percentage) : 0;
 
   const offAddress = 0;
   const offVariant = -pAddress;
@@ -926,11 +1100,11 @@ export default function CartMendDashboard() {
 
         {/* Date Range Selector */}
         {activeTab === "dashboard" && (
-          <div>
+          <div style={{ position: "relative" }} ref={datePickerRef}>
             <button
               type="button"
               className="cm-date-btn"
-              onClick={() => setIsDatePickerOpen(true)}
+              onClick={() => setIsDatePickerOpen((prev) => !prev)}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -943,6 +1117,71 @@ export default function CartMendDashboard() {
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </button>
+
+            {isDatePickerOpen && (
+              <div
+                className="cm-dropdown-popover"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  right: 0,
+                  zIndex: 1000,
+                  minWidth: "160px",
+                  background: "var(--cm-card-bg, #ffffff)",
+                  border: "1px solid var(--cm-border, #e2e8f0)",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                  padding: "6px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                }}
+              >
+                {[
+                  "Today",
+                  "Last 7 Days",
+                  "Last 30 Days",
+                  "Last 90 Days",
+                  "All time",
+                ].map((range) => {
+                  const isSelected = dateRange === range;
+                  return (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => {
+                        setDateRange(range);
+                        setIsDatePickerOpen(false);
+                      }}
+                      className={`cm-dropdown-item ${isSelected ? "active" : ""}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "12.5px",
+                        textAlign: "left",
+                        border: "none",
+                        borderRadius: "6px",
+                        background: isSelected ? "var(--cm-active-bg, rgba(99, 102, 241, 0.12))" : "transparent",
+                        color: isSelected ? "var(--cm-primary, #4f46e5)" : "var(--cm-text-primary, #1e293b)",
+                        fontWeight: isSelected ? 600 : 400,
+                        cursor: "pointer",
+                        transition: "background 0.15s ease",
+                      }}
+                    >
+                      <span>{range}</span>
+                      {isSelected && (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: "13px", height: "13px" }}>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -961,9 +1200,9 @@ export default function CartMendDashboard() {
               </div>
               <div className="cm-metric-body">
                 <div className="cm-metric-label">Total edits</div>
-                <div className="cm-metric-value">{kpis.totalEdits}</div>
+                <div className="cm-metric-value">{dynamicKpis.totalEdits}</div>
                 <div className="cm-metric-trend cm-trend-up">
-                  <span>{kpis.totalEdits > 0 ? "↑ Active" : "— Real-time"}</span>
+                  <span>{dynamicKpis.totalEdits > 0 ? "↑ Active" : "— Real-time"}</span>
                   <span className="cm-trend-sub">tracked in store</span>
                 </div>
               </div>
@@ -981,9 +1220,9 @@ export default function CartMendDashboard() {
               </div>
               <div className="cm-metric-body">
                 <div className="cm-metric-label">Cancellations</div>
-                <div className="cm-metric-value">{kpis.cancellations}</div>
+                <div className="cm-metric-value">{dynamicKpis.cancellations}</div>
                 <div className="cm-metric-trend cm-trend-up">
-                  <span>{kpis.cancellations > 0 ? "↑ Synced" : "0"}</span>
+                  <span>{dynamicKpis.cancellations > 0 ? "↑ Synced" : "0"}</span>
                   <span className="cm-trend-sub">auto-processed</span>
                 </div>
               </div>
@@ -992,16 +1231,16 @@ export default function CartMendDashboard() {
             {/* Card 3: Additional payments */}
             <div className="cm-metric-card">
               <div className="cm-metric-icon blue">
-                <span style={{ fontSize: "16px", fontWeight: 700 }}>{kpis.currencySymbol}</span>
+                <span style={{ fontSize: "16px", fontWeight: 700 }}>{dynamicKpis.currencySymbol}</span>
               </div>
               <div className="cm-metric-body">
                 <div className="cm-metric-label">Additional payments</div>
                 <div className="cm-metric-value">
-                  {kpis.currencySymbol}{kpis.additionalPayments.toFixed(2)}
+                  {dynamicKpis.currencySymbol}{dynamicKpis.additionalPayments.toFixed(2)}
                 </div>
-                <div className={`cm-metric-trend ${kpis.additionalPaymentsCount > 0 ? "cm-trend-up" : ""}`}>
-                  <span>{kpis.additionalPaymentsCount > 0 ? `↑ ${kpis.additionalPaymentsCount}` : "0"}</span>
-                  <span className="cm-trend-sub">Upgrade{kpis.additionalPaymentsCount === 1 ? "" : "s"} collected</span>
+                <div className={`cm-metric-trend ${dynamicKpis.additionalPaymentsCount > 0 ? "cm-trend-up" : ""}`}>
+                  <span>{dynamicKpis.additionalPaymentsCount > 0 ? `↑ ${dynamicKpis.additionalPaymentsCount}` : "0"}</span>
+                  <span className="cm-trend-sub">Upgrade{dynamicKpis.additionalPaymentsCount === 1 ? "" : "s"} collected</span>
                 </div>
               </div>
             </div>
@@ -1019,11 +1258,11 @@ export default function CartMendDashboard() {
               <div className="cm-metric-body">
                 <div className="cm-metric-label">Refunds issued</div>
                 <div className="cm-metric-value">
-                  {kpis.currencySymbol}{kpis.refundsIssued.toFixed(2)}
+                  {dynamicKpis.currencySymbol}{dynamicKpis.refundsIssued.toFixed(2)}
                 </div>
-                <div className={`cm-metric-trend ${kpis.refundsIssuedCount > 0 ? "cm-trend-down" : ""}`}>
-                  <span>{kpis.refundsIssuedCount > 0 ? `↓ ${kpis.refundsIssuedCount}` : "0"}</span>
-                  <span className="cm-trend-sub">Reduction{kpis.refundsIssuedCount === 1 ? "" : "s"} processed</span>
+                <div className={`cm-metric-trend ${dynamicKpis.refundsIssuedCount > 0 ? "cm-trend-down" : ""}`}>
+                  <span>{dynamicKpis.refundsIssuedCount > 0 ? `↓ ${dynamicKpis.refundsIssuedCount}` : "0"}</span>
+                  <span className="cm-trend-sub">Reduction{dynamicKpis.refundsIssuedCount === 1 ? "" : "s"} processed</span>
                 </div>
               </div>
             </div>
@@ -1141,7 +1380,7 @@ export default function CartMendDashboard() {
                       <span>Shipping address</span>
                     </div>
                     <span className="cm-legend-val">
-                      {breakdownType === "count" ? breakdownData.address.count : `${breakdownData.address.percentage}%`}
+                      {breakdownType === "count" ? dynamicBreakdownData.address.count : `${dynamicBreakdownData.address.percentage}%`}
                     </span>
                   </div>
 
@@ -1151,7 +1390,7 @@ export default function CartMendDashboard() {
                       <span>Items &amp; variants</span>
                     </div>
                     <span className="cm-legend-val">
-                      {breakdownType === "count" ? breakdownData.variant.count : `${breakdownData.variant.percentage}%`}
+                      {breakdownType === "count" ? dynamicBreakdownData.variant.count : `${dynamicBreakdownData.variant.percentage}%`}
                     </span>
                   </div>
 
@@ -1161,7 +1400,7 @@ export default function CartMendDashboard() {
                       <span>Quantity</span>
                     </div>
                     <span className="cm-legend-val">
-                      {breakdownType === "count" ? breakdownData.quantity.count : `${breakdownData.quantity.percentage}%`}
+                      {breakdownType === "count" ? dynamicBreakdownData.quantity.count : `${dynamicBreakdownData.quantity.percentage}%`}
                     </span>
                   </div>
 
@@ -1171,7 +1410,7 @@ export default function CartMendDashboard() {
                       <span>Cancellations</span>
                     </div>
                     <span className="cm-legend-val">
-                      {breakdownType === "count" ? breakdownData.cancel.count : `${breakdownData.cancel.percentage}%`}
+                      {breakdownType === "count" ? dynamicBreakdownData.cancel.count : `${dynamicBreakdownData.cancel.percentage}%`}
                     </span>
                   </div>
 
@@ -1191,7 +1430,7 @@ export default function CartMendDashboard() {
               <div className="cm-chart-title">
                 <span>Recent order activity</span>
                 <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 400 }}>
-                  ({activities.length} total events)
+                  ({filteredActivities.length} total events)
                 </span>
               </div>
 
@@ -1202,14 +1441,14 @@ export default function CartMendDashboard() {
               </div>
             </div>
 
-            {activities.length === 0 ? (
+            {filteredActivities.length === 0 ? (
               <div className="cm-empty-state-card">
                 <svg className="cm-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
                   <path d="m3.3 7 8.7 5 8.7-5" />
                   <path d="M12 22V12" />
                 </svg>
-                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b", margin: "4px 0" }}>No order edits yet</h3>
+                <h3 style={{ fontSize: "14px", fontWeight: 600, color: "#1e293b", margin: "4px 0" }}>No order edits in this date range</h3>
                 <p style={{ fontSize: "12px", color: "#64748b", maxWidth: "360px", margin: "0 auto 12px" }}>
                   When customers edit their orders or when you test the edit flow, live activity logs and product details will appear here.
                 </p>
@@ -1230,7 +1469,7 @@ export default function CartMendDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {activities.map((act) => (
+                    {filteredActivities.map((act) => (
                       <tr
                         key={act.id}
                         onClick={() => setSelectedActivity(act)}
@@ -1323,7 +1562,7 @@ export default function CartMendDashboard() {
                 {/* Step 2: Configure Rules */}
                 <div className="cm-step-item">
                   <div className="cm-step-left">
-                    <div className="cm-step-icon-circle">
+                    <div className={`cm-step-icon-circle ${isRulesDone ? "completed" : ""}`}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                         <path d="m9 12 2 2 4-4" />
@@ -1339,7 +1578,9 @@ export default function CartMendDashboard() {
                           <span className="cm-step-num">2</span>
                           <span className="cm-step-title">Configure editing rules</span>
                         </div>
-                        <span className="cm-badge-completed">Configured</span>
+                        {isRulesDone && (
+                          <span className="cm-badge-completed">Configured</span>
+                        )}
                       </div>
                       <p className="cm-step-desc">
                         Window: {merchantSettings.editingWindowMinutes} mins • Swaps: {merchantSettings.allowVariantChange ? "Enabled" : "Disabled"} • Quantities: {merchantSettings.allowQuantityChange ? "Enabled" : "Disabled"}
@@ -1349,7 +1590,7 @@ export default function CartMendDashboard() {
                       to="/app/editing-rules"
                       className="cm-btn-edit-rules"
                     >
-                      Edit rules
+                      {isRulesDone ? "Edit rules" : "Configure rules"}
                     </Link>
                   </div>
                 </div>
@@ -1446,7 +1687,7 @@ export default function CartMendDashboard() {
                 {/* Step 5: Activate */}
                 <div className="cm-step-item">
                   <div className="cm-step-left">
-                    <div className="cm-step-icon-circle">
+                    <div className={`cm-step-icon-circle ${isActivated ? "completed" : ""}`}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -2024,49 +2265,7 @@ export default function CartMendDashboard() {
         </>
       )}
 
-      {/* Date Range Modal */}
-      {isDatePickerOpen && (
-        <div className="cm-modal-overlay" onClick={() => setIsDatePickerOpen(false)}>
-          <div className="cm-modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "380px" }}>
-            <div className="cm-modal-header">
-              <h2 className="cm-modal-title">Select Date Range</h2>
-              <button type="button" className="cm-modal-close" onClick={() => setIsDatePickerOpen(false)}>✕</button>
-            </div>
-            <div className="cm-modal-body">
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {[
-                  "Today",
-                  "Last 7 Days",
-                  "Last 30 Days",
-                  "Last 90 Days",
-                  "All time",
-                ].map((range) => (
-                  <button
-                    key={range}
-                    type="button"
-                    onClick={() => {
-                      setDateRange(range);
-                      setIsDatePickerOpen(false);
-                    }}
-                    style={{
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      borderRadius: "6px",
-                      border: "1px solid #e1e3e5",
-                      background: dateRange === range ? "#e8f5e9" : "#ffffff",
-                      fontWeight: dateRange === range ? 600 : 400,
-                      color: "#1a1a1a",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {range}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Rich Live Order Detail Modal */}
       {selectedActivity && (

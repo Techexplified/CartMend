@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -420,6 +420,22 @@ export default function OrderActivity() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setIsDatePickerOpen(false);
+      }
+    }
+    if (isDatePickerOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDatePickerOpen]);
+
   const filteredData = useMemo(() => {
     return activities.filter((item) => {
       // Category filter
@@ -554,24 +570,92 @@ export default function OrderActivity() {
 
         {/* Right Action Controls: Date Range, Filters, Search */}
         <div className="cm-filter-bar-right">
-          {/* Date Picker Button */}
-          <button
-            type="button"
-            className="cm-date-btn"
-            style={{ padding: "5px 10px", fontSize: "12px" }}
-            onClick={() => setIsDatePickerOpen(true)}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "13px", height: "13px" }}>
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            <span>{dateRange}</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "11px", height: "11px" }}>
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
+          {/* Date Picker Button & Popover Dropdown */}
+          <div style={{ position: "relative" }} ref={datePickerRef}>
+            <button
+              type="button"
+              className="cm-date-btn"
+              style={{ padding: "5px 10px", fontSize: "12px" }}
+              onClick={() => setIsDatePickerOpen((prev) => !prev)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "13px", height: "13px" }}>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span>{dateRange}</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "11px", height: "11px" }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+
+            {isDatePickerOpen && (
+              <div
+                className="cm-dropdown-popover"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  right: 0,
+                  zIndex: 1000,
+                  minWidth: "160px",
+                  background: "var(--cm-card-bg, #ffffff)",
+                  border: "1px solid var(--cm-border, #e2e8f0)",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                  padding: "6px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "2px",
+                }}
+              >
+                {[
+                  "Today",
+                  "Last 7 Days",
+                  "Last 30 Days",
+                  "Last 90 Days",
+                  "All time",
+                ].map((range) => {
+                  const isSelected = dateRange === range;
+                  return (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => {
+                        setDateRange(range);
+                        setCurrentPage(1);
+                        setIsDatePickerOpen(false);
+                      }}
+                      className={`cm-dropdown-item ${isSelected ? "active" : ""}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        padding: "8px 10px",
+                        fontSize: "12.5px",
+                        textAlign: "left",
+                        border: "none",
+                        borderRadius: "6px",
+                        background: isSelected ? "var(--cm-active-bg, rgba(99, 102, 241, 0.12))" : "transparent",
+                        color: isSelected ? "var(--cm-primary, #4f46e5)" : "var(--cm-text-primary, #1e293b)",
+                        fontWeight: isSelected ? 600 : 400,
+                        cursor: "pointer",
+                        transition: "background 0.15s ease",
+                      }}
+                    >
+                      <span>{range}</span>
+                      {isSelected && (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: "13px", height: "13px" }}>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Filters Button */}
           <button
@@ -823,50 +907,7 @@ export default function OrderActivity() {
         )}
       </div>
 
-      {/* Date Range Modal */}
-      {isDatePickerOpen && (
-        <div className="cm-modal-overlay" onClick={() => setIsDatePickerOpen(false)}>
-          <div className="cm-modal-box" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "380px" }}>
-            <div className="cm-modal-header">
-              <h2 className="cm-modal-title">Select Date Range</h2>
-              <button type="button" className="cm-modal-close" onClick={() => setIsDatePickerOpen(false)}>✕</button>
-            </div>
-            <div className="cm-modal-body">
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {[
-                  "Today",
-                  "Last 7 Days",
-                  "Last 30 Days",
-                  "Last 90 Days",
-                  "All time",
-                ].map((range) => (
-                  <button
-                    key={range}
-                    type="button"
-                    onClick={() => {
-                      setDateRange(range);
-                      setCurrentPage(1);
-                      setIsDatePickerOpen(false);
-                    }}
-                    style={{
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      borderRadius: "6px",
-                      border: "1px solid #e1e3e5",
-                      background: dateRange === range ? "#e8f5e9" : "#ffffff",
-                      fontWeight: dateRange === range ? 600 : 400,
-                      color: "#1a1a1a",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {range}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Filter Modal */}
       {isFilterModalOpen && (
