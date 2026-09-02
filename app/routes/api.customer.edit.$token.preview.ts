@@ -19,7 +19,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ params, request }: ActionFunctionArgs) => {
-  const token = params.token;
+  const rawToken = params.token ? decodeURIComponent(params.token).trim() : "";
 
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -28,9 +28,11 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
     });
   }
 
-  if (!token) {
+  if (!rawToken) {
     return Response.json({ error: "Missing customer edit token" }, { status: 400, headers: CORS_HEADERS });
   }
+
+  const token = rawToken;
 
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405, headers: CORS_HEADERS });

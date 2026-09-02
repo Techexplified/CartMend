@@ -1222,6 +1222,27 @@ function renderStorefrontHtml(data: any, token: string, appOrigin: string, isPay
             return sign + sym + absFormatted;
           }
 
+          function cmFetchApi(path, options) {
+            var url1 = (cmAppOrigin ? cmAppOrigin : '') + path;
+            return fetch(url1, options).then(function(r) {
+              if (r.status === 404) {
+                var altPath = path.startsWith('/apps/cartmend')
+                  ? path.replace('/apps/cartmend', '')
+                  : ('/apps/cartmend' + path);
+                var url2 = (cmAppOrigin ? cmAppOrigin : '') + altPath;
+                if (url2 !== url1) {
+                  return fetch(url2, options).then(function(r2) {
+                    if (r2.status === 404 && path.includes('/commit')) {
+                      return fetch(window.location.href, options);
+                    }
+                    return r2;
+                  }).catch(function() { return r; });
+                }
+              }
+              return r;
+            });
+          }
+
           function updateTimer() {
             if (cmSecs <= 0) {
               var tEls = document.querySelectorAll('.cm-timer-val');
@@ -1448,9 +1469,9 @@ function renderStorefrontHtml(data: any, token: string, appOrigin: string, isPay
 
           function fetchShopifyPreview() {
             var payload = buildPayload(cmActiveTab === 'cancel');
-            var previewEndpoint = (cmAppOrigin ? cmAppOrigin : '') + '/api/customer/edit/' + cmToken + '/preview';
+            var path = '/api/customer/edit/' + encodeURIComponent(cmToken) + '/preview';
 
-            fetch(previewEndpoint, {
+            cmFetchApi(path, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
               body: JSON.stringify(payload)
@@ -1753,9 +1774,9 @@ function renderStorefrontHtml(data: any, token: string, appOrigin: string, isPay
             if (err) err.style.display = 'none';
 
             var payload = buildPayload(cmActiveTab === 'cancel');
-            var endpoint = (cmAppOrigin ? cmAppOrigin : '') + '/api/customer/edit/' + cmToken + '/commit';
+            var path = '/api/customer/edit/' + encodeURIComponent(cmToken) + '/commit';
 
-            fetch(endpoint, {
+            cmFetchApi(path, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1911,8 +1932,8 @@ function renderStorefrontHtml(data: any, token: string, appOrigin: string, isPay
           }
 
           window.cmVerifyPayment = function(isSilent) {
-            var verifyEndpoint = (cmAppOrigin ? cmAppOrigin : '') + '/api/customer/edit/' + cmToken + '/payment/verify';
-            fetch(verifyEndpoint, {
+            var path = '/api/customer/edit/' + encodeURIComponent(cmToken) + '/payment/verify';
+            cmFetchApi(path, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
             })

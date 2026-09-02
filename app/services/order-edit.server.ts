@@ -210,7 +210,12 @@ export async function validateAndGetSession(
     throw new EditSessionNotFound();
   }
 
-  const tokenHash = hashToken(rawToken);
+  const trimmedToken = String(rawToken || "").trim();
+  if (!trimmedToken) {
+    throw new EditSessionNotFound();
+  }
+
+  const tokenHash = hashToken(trimmedToken);
   let session = await prisma.orderEditSession.findUnique({
     where: { tokenHash },
     include: {
@@ -225,8 +230,8 @@ export async function validateAndGetSession(
     session = await prisma.orderEditSession.findFirst({
       where: {
         OR: [
-          { tokenHash: rawToken },
-          { id: rawToken },
+          { tokenHash: trimmedToken },
+          { id: trimmedToken },
         ],
       },
       include: {
@@ -238,16 +243,46 @@ export async function validateAndGetSession(
     });
   }
 
+  // Lookup in OrderEditEvent metadata for previous rotated tokens
   if (!session) {
-    const cleanOrderId = rawToken.replace(/\D/g, "");
+    const eventWithToken = await prisma.orderEditEvent.findFirst({
+      where: {
+        OR: [
+          { metadata: { path: ["previousTokenHash"], equals: tokenHash } },
+          { metadata: { path: ["tokenHash"], equals: tokenHash } },
+          { metadata: { path: ["newTokenHash"], equals: tokenHash } },
+          { metadata: { path: ["previousTokenHash"], equals: trimmedToken } },
+          { metadata: { path: ["tokenHash"], equals: trimmedToken } },
+          { metadata: { path: ["rawToken"], equals: trimmedToken } },
+        ],
+      },
+      include: {
+        editSession: {
+          include: {
+            shop: { include: { settings: true } },
+            order: true,
+            changes: true,
+            events: { orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (eventWithToken?.editSession) {
+      session = eventWithToken.editSession;
+    }
+  }
+
+  if (!session) {
+    const cleanOrderId = trimmedToken.replace(/\D/g, "");
     if (cleanOrderId) {
       session = await prisma.orderEditSession.findFirst({
         where: {
           order: {
             OR: [
               { shopifyOrderId: cleanOrderId },
-              { shopifyOrderId: rawToken },
-              { shopifyOrderName: rawToken },
+              { shopifyOrderId: trimmedToken },
+              { shopifyOrderName: trimmedToken },
               { shopifyOrderName: `#${cleanOrderId}` },
             ],
           },
@@ -264,7 +299,11 @@ export async function validateAndGetSession(
   }
 
   if (!session) {
-    if (rawToken === "3fab288acb2e50d64b32779fa29f9f489b4229dabad9db30d9cce9adcd61e7c3" || rawToken === "preview" || rawToken.startsWith("preview")) {
+    if (
+      trimmedToken === "3fab288acb2e50d64b32779fa29f9f489b4229dabad9db30d9cce9adcd61e7c3" ||
+      trimmedToken === "preview" ||
+      trimmedToken.startsWith("preview")
+    ) {
       session = await prisma.orderEditSession.findFirst({
         where: {
           status: { in: [EditSessionStatus.ACTIVE, EditSessionStatus.PAYMENT_REQUIRED] },
@@ -293,31 +332,54 @@ export async function validateAndGetSession(
     throw new EditSessionExpired("This order edit session was cancelled.");
   }
 
-  if (session.status === EditSessionStatus.EXPIRED) {
-    throw new EditSessionExpired();
-  }
+  // Calculate dynamic expiration matching store's current merchant settings
+  const settings = session.shop?.settings;
+  const windowMinutes = settings?.editingWindowMinutes || 180;
+  const orderCreatedDate = session.order?.orderCreatedAt
+    ? new Date(session.order.orderCreatedAt)
+    : (session.order?.createdAt ? new Date(session.order.createdAt) : new Date(session.createdAt));
+  const dynamicExpiresAt = new Date(orderCreatedDate.getTime() + windowMinutes * 60 * 1000);
 
-  // Check expiration time for active/pending sessions
-  if (session.status !== EditSessionStatus.COMPLETED && new Date() > session.expiresAt) {
-    await prisma.orderEditSession.update({
-      where: { id: session.id },
-      data: { status: EditSessionStatus.EXPIRED },
-    });
-    await prisma.orderEditEvent.create({
-      data: {
-        editSessionId: session.id,
-        eventType: EditEventType.SESSION_EXPIRED,
-        actorType: ActorType.SYSTEM,
-      },
-    });
-    throw new EditSessionExpired();
+  // If the order is within its dynamic editing window, keep/restore session as ACTIVE
+  if (session.status !== EditSessionStatus.COMPLETED) {
+    if (new Date() <= dynamicExpiresAt) {
+      if (session.status === EditSessionStatus.EXPIRED) {
+        session.status = EditSessionStatus.ACTIVE;
+      }
+      if (session.expiresAt.getTime() !== dynamicExpiresAt.getTime()) {
+        session.expiresAt = dynamicExpiresAt;
+        await prisma.orderEditSession.update({
+          where: { id: session.id },
+          data: {
+            status: session.status,
+            expiresAt: dynamicExpiresAt,
+          },
+        }).catch(() => null);
+      }
+    } else {
+      // Genuinely expired past the editing window
+      if (session.status !== EditSessionStatus.EXPIRED) {
+        await prisma.orderEditSession.update({
+          where: { id: session.id },
+          data: { status: EditSessionStatus.EXPIRED },
+        }).catch(() => null);
+        await prisma.orderEditEvent.create({
+          data: {
+            editSessionId: session.id,
+            eventType: EditEventType.SESSION_EXPIRED,
+            actorType: ActorType.SYSTEM,
+          },
+        }).catch(() => null);
+      }
+      throw new EditSessionExpired();
+    }
   }
 
   // Check order fulfillment & cancellation status
   if (
-    session.order.fulfillmentStatus === "FULFILLED" ||
-    session.order.fulfillmentStatus === "PARTIALLY_FULFILLED" ||
-    session.order.financialStatus === "VOIDED"
+    session.order?.fulfillmentStatus === "FULFILLED" ||
+    session.order?.fulfillmentStatus === "PARTIALLY_FULFILLED" ||
+    session.order?.financialStatus === "VOIDED"
   ) {
     throw new OrderNotEditable();
   }
@@ -1121,7 +1183,9 @@ export async function commitOrderEdit(
   changes: RequestedEditChanges,
   idempotencyKey?: string
 ): Promise<CommitOrderEditResult> {
-  if (rawToken === "preview" || rawToken === "preview-session-id" || rawToken.startsWith("preview")) {
+  const trimmedToken = String(rawToken || "").trim();
+
+  if (trimmedToken === "preview" || trimmedToken === "preview-session-id" || trimmedToken.startsWith("preview")) {
     if (changes.isCancellation || (changes.removedLineItems && changes.removedLineItems.length >= 2)) {
       return {
         success: true,
@@ -1148,7 +1212,46 @@ export async function commitOrderEdit(
     };
   }
 
-  const session = await validateAndGetSession(rawToken, { allowCompleted: true });
+  let session: any = null;
+  try {
+    session = await validateAndGetSession(trimmedToken, { allowCompleted: true });
+  } catch (err) {
+    const cleanOrderId = trimmedToken.replace(/\D/g, "");
+    if (cleanOrderId) {
+      const dbOrder = await prisma.order.findFirst({
+        where: {
+          OR: [
+            { shopifyOrderId: cleanOrderId },
+            { shopifyOrderId: trimmedToken },
+            { shopifyOrderName: trimmedToken },
+            { shopifyOrderName: `#${cleanOrderId}` },
+          ],
+        },
+        include: {
+          editSessions: {
+            where: {
+              status: {
+                in: [
+                  EditSessionStatus.ACTIVE,
+                  EditSessionStatus.PAYMENT_REQUIRED,
+                  EditSessionStatus.IN_PROGRESS,
+                  EditSessionStatus.COMPLETED,
+                ],
+              },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      });
+      if (dbOrder?.editSessions && dbOrder.editSessions.length > 0) {
+        session = await validateAndGetSession(dbOrder.editSessions[0].id, { allowCompleted: true });
+      }
+    }
+    if (!session) {
+      throw err;
+    }
+  }
+
   const settings = session.shop.settings!;
 
   // 1. Backend permissions verification
@@ -1223,7 +1326,7 @@ export async function commitOrderEdit(
             session.order.shopifyOrderGid,
             cancelReason,
             true,
-            settings.notifyCustomer ?? false,
+            settings.notifyCustomer ?? true,
             "Order cancelled by customer via CartMend"
           );
         } catch (cancelErr: any) {

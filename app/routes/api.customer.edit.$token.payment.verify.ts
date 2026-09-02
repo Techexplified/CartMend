@@ -13,13 +13,13 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  const token = params.token;
-  if (!token) {
+  const rawToken = params.token ? decodeURIComponent(params.token).trim() : "";
+  if (!rawToken) {
     return Response.json({ error: "Missing customer edit token" }, { status: 400, headers: CORS_HEADERS });
   }
 
   try {
-    const result = await OrderEditPaymentService.verifyPayment(token);
+    const result = await OrderEditPaymentService.verifyPayment(rawToken);
     return Response.json(result, { headers: CORS_HEADERS });
   } catch (error: any) {
     if (error instanceof DomainError) {
@@ -41,13 +41,13 @@ export const action = async ({ params, request }: ActionFunctionArgs) => {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  const token = params.token;
-  if (!token) {
+  const rawToken = params.token ? decodeURIComponent(params.token).trim() : "";
+  if (!rawToken) {
     return Response.json({ error: "Missing customer edit token" }, { status: 400, headers: CORS_HEADERS });
   }
 
   try {
-    const result = await OrderEditPaymentService.verifyPayment(token);
+    const result = await OrderEditPaymentService.verifyPayment(rawToken);
     return Response.json(result, { headers: CORS_HEADERS });
   } catch (error: any) {
     if (error instanceof DomainError) {

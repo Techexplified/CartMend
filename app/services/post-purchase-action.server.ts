@@ -286,7 +286,12 @@ export class PostPurchaseActionService {
           editSessionId: activeSession.id,
           eventType: EditEventType.SESSION_OPENED,
           actorType: ActorType.CUSTOMER,
-          metadata: { entryPoint: "THANK_YOU_PAGE" },
+          metadata: {
+            entryPoint: "THANK_YOU_PAGE",
+            previousTokenHash: activeSession.tokenHash,
+            tokenHash: activeSession.tokenHash,
+            newTokenHash: tokenHash,
+          },
         },
       });
 
