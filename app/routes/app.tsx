@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Link, Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { NavMenu } from "@shopify/app-bridge-react";
 
 import { authenticate } from "../shopify.server";
 import { getMerchantSettings } from "../services/merchant-settings.server";
@@ -55,6 +56,12 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
+      <NavMenu>
+        <Link to="/app" rel="home">Dashboard</Link>
+        <Link to="/app/order-activity">Order Activity</Link>
+        <Link to="/app/editing-rules">Editing Rules</Link>
+        <Link to="/app/settings">Settings</Link>
+      </NavMenu>
       <div
         className={`cm-app-theme-root ${currentTheme === "Dark" ? "dark" : ""}`}
         data-theme={currentTheme.toLowerCase()}
