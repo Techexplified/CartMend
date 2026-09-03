@@ -523,14 +523,18 @@ export const REFUND_CREATE_MUTATION = `#graphql
           }
         }
         transactions(first: 10) {
-          id
-          status
-          kind
-          gateway
-          amountSet {
-            shopMoney {
-              amount
-              currencyCode
+          edges {
+            node {
+              id
+              status
+              kind
+              gateway
+              amountSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
             }
           }
         }

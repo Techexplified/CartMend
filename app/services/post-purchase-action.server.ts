@@ -569,6 +569,68 @@ export class PostPurchaseActionService {
     // Perform actual Shopify Admin GraphQL cancellation
     await client.orderCancel(orderGid, reason, true, true);
 
+    // 1. Tag the order in Shopify Admin so it's immediately recognizable as Cancelled
+    try {
+      await client.execute(
+        `mutation TagsAdd($id: ID!, $tags: [String!]!) {
+          tagsAdd(id: $id, tags: $tags) {
+            node { id }
+            userErrors { field message }
+          }
+        }`,
+        { id: orderGid, tags: ["Cancelled", "Cancelled via CartMend"] }
+      );
+    } catch (tagErr) {
+      console.warn("[CartMend] Could not add cancellation tags:", tagErr);
+    }
+
+    // 2. Issue full refund for captured transactions so payment status changes to REFUNDED in Shopify Admin
+    try {
+      const txData = await client.getOrderTransactions(orderGid).catch(() => null);
+      const parentTx = (txData?.transactions || []).find(
+        (t: any) =>
+          (t.kind === "SALE" || t.kind === "CAPTURE") &&
+          (t.status === "SUCCESS" || t.status === "success")
+      );
+      if (parentTx && parentTx.id) {
+        const refundAmount = parentTx.amountSet?.shopMoney?.amount || parentTx.amount;
+        if (refundAmount) {
+          await client.refundCreate({
+            orderId: orderGid,
+            note: "Full refund for customer cancellation via CartMend",
+            currency: parentTx.amountSet?.shopMoney?.currencyCode || parentTx.currency || "USD",
+            notify: true,
+            transactions: [
+              {
+                orderId: orderGid,
+                parentId: parentTx.id,
+                amount: String(refundAmount),
+                gateway: parentTx.gateway,
+                kind: "REFUND",
+              },
+            ],
+          });
+        }
+      }
+    } catch (refundErr) {
+      console.warn("[CartMend] Could not issue Shopify refund:", refundErr);
+    }
+
+    // 3. Close (archive) the order in Shopify so it moves out of active open orders
+    try {
+      await client.execute(
+        `mutation OrderClose($input: OrderCloseInput!) {
+          orderClose(input: $input) {
+            order { id closed }
+            userErrors { field message }
+          }
+        }`,
+        { input: { id: orderGid } }
+      );
+    } catch (closeErr) {
+      console.warn("[CartMend] Could not close order:", closeErr);
+    }
+
     const cancelledAt = new Date().toISOString();
 
     // Update local database order status if present

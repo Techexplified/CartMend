@@ -396,6 +396,7 @@ export class OrderEditPaymentService {
           notify: shouldSendRefundEmail,
           transactions: [
             {
+              orderId: session.order.shopifyOrderGid,
               parentId: parentTx.id,
               amount: refundAmount.toFixed(2),
               gateway: parentTx.gateway,

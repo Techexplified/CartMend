@@ -1335,6 +1335,36 @@ export async function commitOrderEdit(
             // Log but proceed to issue refund & sync DB state
           }
         }
+
+        // Tag the order in Shopify Admin so it's immediately recognizable as Cancelled
+        try {
+          await client.execute(
+            `mutation TagsAdd($id: ID!, $tags: [String!]!) {
+              tagsAdd(id: $id, tags: $tags) {
+                node { id }
+                userErrors { field message }
+              }
+            }`,
+            { id: session.order.shopifyOrderGid, tags: ["Cancelled", "Cancelled via CartMend"] }
+          );
+        } catch (tagErr) {
+          console.warn("[CartMend] Could not add cancellation tags:", tagErr);
+        }
+
+        // Close (archive) the order in Shopify
+        try {
+          await client.execute(
+            `mutation OrderClose($input: OrderCloseInput!) {
+              orderClose(input: $input) {
+                order { id closed }
+                userErrors { field message }
+              }
+            }`,
+            { input: { id: session.order.shopifyOrderGid } }
+          );
+        } catch (closeErr) {
+          console.warn("[CartMend] Could not close order:", closeErr);
+        }
       }
 
       if (settings.allowRefundForDifference) {
