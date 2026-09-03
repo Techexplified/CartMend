@@ -323,7 +323,6 @@ export class ShopifyGraphQLClient {
       orderCancel: {
         job?: { id: string; done: boolean };
         orderCancelUserErrors?: GraphQLUserError[];
-        userErrors?: GraphQLUserError[];
       };
     }>(ORDER_CANCEL_MUTATION, {
       orderId: orderGid,
@@ -334,10 +333,7 @@ export class ShopifyGraphQLClient {
     });
 
     const result = data?.orderCancel;
-    const errors = [
-      ...(result?.orderCancelUserErrors || []),
-      ...(result?.userErrors || []),
-    ];
+    const errors = result?.orderCancelUserErrors || [];
     if (errors.length > 0) {
       throw new ShopifyAPIError(
         `orderCancel failed: ${errors.map((u) => u.message).join(", ")}`,
