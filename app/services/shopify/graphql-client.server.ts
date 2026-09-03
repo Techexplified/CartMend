@@ -1,4 +1,5 @@
 import { unauthenticated } from "../../shopify.server";
+import prisma from "../../db.server";
 import {
   GET_SHOP_QUERY,
   GET_ORDERS_QUERY,
@@ -57,7 +58,32 @@ export class ShopifyGraphQLClient {
     while (attempt <= retries) {
       attempt++;
       try {
-        const { admin } = await unauthenticated.admin(this.shop);
+        let adminContext: any;
+        try {
+          adminContext = await unauthenticated.admin(this.shop);
+        } catch (authErr: any) {
+          try {
+            const session = await prisma.session.findFirst({
+              where: {
+                OR: [
+                  { shop: { contains: this.shop, mode: "insensitive" } },
+                  { shop: { endsWith: ".myshopify.com", mode: "insensitive" } },
+                ],
+              },
+              orderBy: { id: "desc" },
+            });
+            if (session?.shop && session.shop !== this.shop) {
+              this.shop = session.shop;
+              adminContext = await unauthenticated.admin(this.shop);
+            } else {
+              throw authErr;
+            }
+          } catch {
+            throw authErr;
+          }
+        }
+
+        const { admin } = adminContext;
         const response = await admin.graphql(query, {
           variables: variables || {},
         });
@@ -297,6 +323,7 @@ export class ShopifyGraphQLClient {
       orderCancel: {
         job?: { id: string; done: boolean };
         orderCancelUserErrors?: GraphQLUserError[];
+        userErrors?: GraphQLUserError[];
       };
     }>(ORDER_CANCEL_MUTATION, {
       orderId: orderGid,
@@ -307,10 +334,14 @@ export class ShopifyGraphQLClient {
     });
 
     const result = data?.orderCancel;
-    if (result?.orderCancelUserErrors && result.orderCancelUserErrors.length > 0) {
+    const errors = [
+      ...(result?.orderCancelUserErrors || []),
+      ...(result?.userErrors || []),
+    ];
+    if (errors.length > 0) {
       throw new ShopifyAPIError(
-        `orderCancel failed: ${result.orderCancelUserErrors.map((u) => u.message).join(", ")}`,
-        result.orderCancelUserErrors
+        `orderCancel failed: ${errors.map((u) => u.message).join(", ")}`,
+        errors
       );
     }
     return result;

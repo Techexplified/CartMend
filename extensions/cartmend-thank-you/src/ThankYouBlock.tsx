@@ -116,7 +116,7 @@ function ThankYouActionsComponent() {
   const initialEditUrl = shopDomain
     ? `https://${shopDomain}/apps/cartmend/api/customer/post-purchase/edit-session?order_id=${cleanOrderId}&shop=${shopDomain}&redirect=1`
     : `/apps/cartmend/api/customer/post-purchase/edit-session?order_id=${cleanOrderId}&redirect=1`;
-  const initialReorderUrl = shopDomain ? `https://${shopDomain}/cart` : `/cart`;
+  const initialReorderUrl = shopDomain ? `https://${shopDomain}/checkout` : `/checkout`;
 
   const [editUrl, setEditUrl] = useState<string>(initialEditUrl);
   const [reorderUrl, setReorderUrl] = useState<string>(initialReorderUrl);
@@ -201,26 +201,48 @@ function ThankYouActionsComponent() {
         }
 
         // 3. Pre-generate Reorder URL
-        const reorderRes = await fetch(getApiUrl("reorder"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-shopify-shop-domain": shopDomain,
-          },
-          body: JSON.stringify({
-            shopifyOrderId: cleanOrderId || rawOrderId || "preview",
-            shopDomain,
-          }),
-        });
+        let reorderJson: any = null;
+        try {
+          const reorderRes = await fetch(getApiUrl("reorder"), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-shopify-shop-domain": shopDomain,
+            },
+            body: JSON.stringify({
+              shopifyOrderId: cleanOrderId || rawOrderId || "preview",
+              shopDomain,
+            }),
+          });
 
-        if (reorderRes.ok) {
-          const reorderJson = await reorderRes.json();
-          if (isMounted && reorderJson && reorderJson.cartUrl) {
-            const finalCartUrl = reorderJson.cartUrl.startsWith("http")
-              ? reorderJson.cartUrl
-              : (shopDomain ? `https://${shopDomain}${reorderJson.cartUrl}` : reorderJson.cartUrl);
-            setReorderUrl(finalCartUrl);
+          if (reorderRes.ok) {
+            reorderJson = await reorderRes.json();
           }
+        } catch {
+          // fallback
+        }
+
+        if (!reorderJson && shopDomain) {
+          try {
+            const fallbackRes = await fetch(
+              `/apps/cartmend/api/customer/post-purchase/reorder?shop=${shopDomain}&order_id=${cleanOrderId || rawOrderId || "preview"}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ shopifyOrderId: cleanOrderId || rawOrderId || "preview", shopDomain }),
+              }
+            );
+            if (fallbackRes.ok) reorderJson = await fallbackRes.json();
+          } catch {
+            // ignore
+          }
+        }
+
+        if (isMounted && reorderJson && reorderJson.cartUrl) {
+          const finalCartUrl = reorderJson.cartUrl.startsWith("http")
+            ? reorderJson.cartUrl
+            : (shopDomain ? `https://${shopDomain}${reorderJson.cartUrl}` : reorderJson.cartUrl);
+          setReorderUrl(finalCartUrl);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -268,24 +290,74 @@ function ThankYouActionsComponent() {
     setBusyAction("cancel");
     setError(null);
     try {
-      await fetch(getApiUrl("cancel"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-shopify-shop-domain": shopDomain,
-        },
-        body: JSON.stringify({
-          shopifyOrderId: cleanOrderId || rawOrderId || "preview",
-          shopDomain,
-          reason: "CUSTOMER",
-          refundMethod: "ORIGINAL_PAYMENT_METHOD",
-          restock: true,
-        }),
-      });
-      setCancelledSuccess(true);
-      setShowCancelConfirm(false);
-    } catch {
-      setCancelledSuccess(true);
+      let cancelRes: Response | null = null;
+      let cancelJson: any = null;
+
+      try {
+        cancelRes = await fetch(getApiUrl("cancel"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-shopify-shop-domain": shopDomain,
+          },
+          body: JSON.stringify({
+            shopifyOrderId: cleanOrderId || rawOrderId || "preview",
+            shopDomain,
+            reason: "CUSTOMER",
+            refundMethod: "ORIGINAL_PAYMENT_METHOD",
+            restock: true,
+          }),
+        });
+        if (cancelRes && cancelRes.ok) {
+          cancelJson = await cancelRes.json();
+        }
+      } catch (proxyErr) {
+        console.warn("[CartMend] App proxy cancel error, trying direct fallback:", proxyErr);
+      }
+
+      if (!cancelJson && shopDomain) {
+        const fallbackRes = await fetch(
+          `/apps/cartmend/api/customer/post-purchase/cancel?shop=${shopDomain}&order_id=${cleanOrderId || rawOrderId || "preview"}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-shopify-shop-domain": shopDomain,
+            },
+            body: JSON.stringify({
+              shopifyOrderId: cleanOrderId || rawOrderId || "preview",
+              shopDomain,
+              reason: "CUSTOMER",
+              refundMethod: "ORIGINAL_PAYMENT_METHOD",
+              restock: true,
+            }),
+          }
+        );
+        if (fallbackRes.ok) {
+          cancelJson = await fallbackRes.json();
+        } else {
+          const errData = await fallbackRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Cancellation failed (HTTP ${fallbackRes.status})`);
+        }
+      }
+
+      if (!cancelJson) {
+        if (cancelRes && !cancelRes.ok) {
+          const errData = await cancelRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Cancellation failed (HTTP ${cancelRes.status})`);
+        }
+        throw new Error("Unable to complete order cancellation. Please try again.");
+      }
+
+      if (cancelJson.success) {
+        setCancelledSuccess(true);
+        setShowCancelConfirm(false);
+      } else {
+        throw new Error(cancelJson.error || "Order cancellation was not processed.");
+      }
+    } catch (err: any) {
+      console.error("[CartMend] Cancellation error:", err);
+      setError(err?.message || "Failed to cancel order on Shopify. Please try again.");
       setShowCancelConfirm(false);
     } finally {
       setBusyAction(null);

@@ -202,7 +202,7 @@ describe("PostPurchaseActionService - Thank You Page Actions", () => {
 
       expect(reorder.success).toBe(true);
       expect(reorder.itemsCount).toBe(3); // 1 + 2
-      expect(reorder.cartUrl).toBe(`https://${shopDomain}/cart/201:1,202:2`);
+      expect(reorder.cartUrl).toBe(`https://${shopDomain}/cart/201:1,202:2?checkout`);
       expect(reorder.unavailableItems.length).toBe(0);
     });
   });

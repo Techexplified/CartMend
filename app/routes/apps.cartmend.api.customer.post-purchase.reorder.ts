@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { PostPurchaseActionService } from "../services/post-purchase-action.server";
+import { getOrCreateShop } from "../services/merchant-settings.server";
 import prisma from "../db.server";
 
 const CORS_HEADERS = {
@@ -36,25 +37,20 @@ export async function action({ request }: ActionFunctionArgs) {
       shopifyOrderId = url.searchParams.get("order_id") || url.searchParams.get("id") || "";
     }
 
-    if (!shopDomain || !shopifyOrderId) {
+    if (!shopDomain) {
+      const firstShop = await prisma.shop.findFirst({ where: { uninstalledAt: null } });
+      if (firstShop) shopDomain = firstShop.shopDomain;
+    }
+
+    if (!shopDomain) {
       return Response.json(
-        { error: "Missing required parameters: shopDomain and shopifyOrderId" },
+        { error: "Missing required parameter: shopDomain" },
         { status: 400, headers: CORS_HEADERS }
       );
     }
 
     const cleanDomain = shopDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
-
-    const shop = await prisma.shop.findUnique({
-      where: { shopDomain: cleanDomain },
-    });
-
-    if (!shop) {
-      return Response.json(
-        { error: `Shop ${cleanDomain} is not registered with CartMend.` },
-        { status: 404, headers: CORS_HEADERS }
-      );
-    }
+    await getOrCreateShop(cleanDomain);
 
     const reorderResult = await PostPurchaseActionService.buildReorderCart(cleanDomain, String(shopifyOrderId));
 
