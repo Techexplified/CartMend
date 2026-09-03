@@ -202,6 +202,44 @@ export async function processShopifyWebhook(params: ProcessWebhookParams) {
         break;
       }
 
+      case "customers/data_request": {
+        console.log(`[Compliance] Customer data request received for shop: ${cleanDomain}, customer:`, payload?.customer?.id || payload?.customer?.email);
+        break;
+      }
+
+      case "customers/redact": {
+        const customerEmail = payload?.customer?.email;
+        console.log(`[Compliance] Customer redact request for shop: ${cleanDomain}, customer:`, customerEmail);
+        if (customerEmail) {
+          try {
+            await prisma.orderActivity.updateMany({
+              where: { shop: cleanDomain, customerEmail },
+              data: { customerName: "Redacted Customer", customerEmail: "redacted@privacy.local" },
+            });
+          } catch (e) {
+            console.warn("[Compliance] Could not redact order activity:", e);
+          }
+        }
+        break;
+      }
+
+      case "shop/redact": {
+        console.log(`[Compliance] Shop redact request for shop: ${cleanDomain}`);
+        try {
+          await prisma.session.deleteMany({ where: { shop: cleanDomain } });
+          const targetShop = await prisma.shop.findUnique({ where: { shopDomain: cleanDomain } });
+          if (targetShop) {
+            await prisma.shop.update({
+              where: { id: targetShop.id },
+              data: { uninstalledAt: new Date() },
+            });
+          }
+        } catch (e) {
+          console.warn("[Compliance] Could not redact shop data:", e);
+        }
+        break;
+      }
+
       default:
         break;
     }
